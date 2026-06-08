@@ -34,12 +34,15 @@ export default function NewCoursePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-screen-sm bg-white px-5 py-6">
+    <main className="mx-auto min-h-dvh w-full max-w-screen-sm bg-white px-5 pb-10 pt-[max(24px,env(safe-area-inset-top))]">
       <header className="mb-6">
         <Link href="/" className="text-sm font-bold text-gray-600 active:text-gray-950">
           돌아가기
         </Link>
-        <h1 className="mt-4 text-2xl font-bold text-gray-950">새 강의 등록</h1>
+        <h1 className="mt-4 text-3xl font-bold text-gray-950">새 강의 등록</h1>
+        <p className="mt-2 text-sm leading-6 text-gray-500">
+          강의 목록은 줄 단위로 저장됩니다. 한 줄에 하나의 강의를 입력하세요.
+        </p>
       </header>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -49,7 +52,7 @@ export default function NewCoursePage() {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="2026 세법학 기본이론"
-            className="mt-2 min-h-12 w-full rounded-lg border border-gray-300 px-4 text-base text-gray-950 outline-none focus:border-gray-950"
+            className="mt-2 min-h-14 w-full rounded-lg border border-gray-300 bg-white px-4 text-base text-gray-950 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-100"
           />
         </label>
 
@@ -59,16 +62,18 @@ export default function NewCoursePage() {
             value={lectureText}
             onChange={(event) => setLectureText(event.target.value)}
             placeholder={"1강 OT\n2강 법인세 총론\n3강 익금\n4강 손금"}
-            rows={10}
-            className="mt-2 w-full resize-y rounded-lg border border-gray-300 px-4 py-3 text-base leading-6 text-gray-950 outline-none focus:border-gray-950"
+            rows={12}
+            className="mt-2 w-full resize-y rounded-lg border border-gray-300 bg-white px-4 py-3 text-base leading-7 text-gray-950 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-100"
           />
         </label>
 
-        {error ? <p className="mt-4 text-sm font-bold text-red-600">{error}</p> : null}
+        {error ? (
+          <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</p>
+        ) : null}
 
         <button
           type="submit"
-          className="mt-6 flex min-h-14 w-full items-center justify-center rounded-lg bg-gray-950 px-5 text-base font-bold text-white active:bg-gray-800"
+          className="mt-6 flex min-h-14 w-full items-center justify-center rounded-lg bg-gray-950 px-5 text-base font-bold text-white shadow-sm active:bg-gray-800"
         >
           등록
         </button>

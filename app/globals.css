@@ -29,3 +29,15 @@ textarea,
 select {
   font: inherit;
 }
+
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+a,
+button,
+select {
+  -webkit-tap-highlight-color: transparent;
+}

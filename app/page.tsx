@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { deleteCourse, getCourses } from "@/lib/storage";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { deleteCourse, exportCourses, getCourses, importCourses } from "@/lib/storage";
 import type { CourseWithLectures } from "@/lib/types";
 
 function getProgress(course: CourseWithLectures) {
@@ -14,8 +14,15 @@ function getProgress(course: CourseWithLectures) {
   return Math.round((completedCount / course.lectures.length) * 100);
 }
 
+function getBackupFileName() {
+  return `lecture-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+}
+
 export default function Home() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [courses, setCourses] = useState<CourseWithLectures[]>([]);
+  const [message, setMessage] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     setCourses(getCourses());
@@ -31,11 +38,82 @@ export default function Home() {
     setCourses(getCourses());
   }
 
+  function handleBackup() {
+    const data = exportCourses();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = getBackupFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage("백업 파일을 다운로드했습니다.");
+    setIsSettingsOpen(false);
+  }
+
+  async function handleRestore(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const confirmed = window.confirm("현재 저장된 데이터가 덮어쓰기 됩니다. 계속할까요?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+      const restoredCourses = importCourses(parsed);
+      setCourses(restoredCourses);
+      setMessage("데이터를 불러왔습니다.");
+      setIsSettingsOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "백업 파일을 불러오지 못했습니다.";
+      setMessage(errorMessage);
+      setIsSettingsOpen(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-screen-sm flex-col bg-white px-5 pb-10 pt-[max(24px,env(safe-area-inset-top))]">
-      <header className="pb-6">
-        <p className="text-sm font-bold text-blue-600">진도 관리</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-normal text-gray-950">Lecture Tracker</h1>
+      <header className="flex items-start justify-between gap-4 pb-6">
+        <div>
+          <p className="text-sm font-bold text-blue-600">진도 관리</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-normal text-gray-950">Lecture Tracker</h1>
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen((current) => !current)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-700 active:bg-gray-100"
+            aria-label="설정"
+          >
+            <GearIcon />
+          </button>
+
+          {isSettingsOpen ? (
+            <div className="absolute right-0 top-12 z-10 w-48 rounded-2xl border border-gray-200 bg-white p-2 shadow-lg">
+              <button
+                type="button"
+                onClick={handleBackup}
+                className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-bold text-gray-800 active:bg-gray-50"
+              >
+                데이터 백업
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-sm font-bold text-gray-800 active:bg-gray-50"
+              >
+                데이터 불러오기
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
       <section className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
@@ -54,6 +132,14 @@ export default function Home() {
         >
           + 강의 추가
         </Link>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          onChange={handleRestore}
+          className="hidden"
+        />
+        {message ? <p className="mt-3 text-sm font-bold text-gray-600">{message}</p> : null}
       </section>
 
       <section className="mt-6 flex-1">
@@ -107,6 +193,19 @@ export default function Home() {
         )}
       </section>
     </main>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10.3 4.4 11 2h2l.7 2.4 1.9.8 2.2-1.2 1.4 1.4-1.2 2.2.8 1.9 2.2.7v2l-2.2.7-.8 1.9 1.2 2.2-1.4 1.4-2.2-1.2-1.9.8L13 22h-2l-.7-2.4-1.9-.8-2.2 1.2-1.4-1.4 1.2-2.2-.8-1.9L3 13.8v-2l2.2-.7.8-1.9-1.2-2.2 1.4-1.4 2.2 1.2 1.9-.8Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+    </svg>
   );
 }
 

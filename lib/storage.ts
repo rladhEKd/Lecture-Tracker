@@ -28,6 +28,29 @@ function createDefaultSection(courseId: string, createdAt: string): Section {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isValidBackup(value: unknown): value is StoredCourse[] {
+  return (
+    Array.isArray(value) &&
+    value.every((course) => {
+      if (!isRecord(course)) {
+        return false;
+      }
+
+      return (
+        typeof course.id === "string" &&
+        typeof course.title === "string" &&
+        typeof course.createdAt === "string" &&
+        (course.sections === undefined || Array.isArray(course.sections)) &&
+        (course.lectures === undefined || Array.isArray(course.lectures))
+      );
+    })
+  );
+}
+
 function normalizeCourse(course: StoredCourse): CourseWithLectures {
   const defaultSection = createDefaultSection(course.id, course.createdAt);
   const sections =
@@ -151,6 +174,20 @@ function parseCourseLines(courseId: string, lines: string[], createdAt: string) 
 
 export function getCourses(): CourseWithLectures[] {
   return readCourses().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function exportCourses(): CourseWithLectures[] {
+  return readCourses();
+}
+
+export function importCourses(value: unknown): CourseWithLectures[] {
+  if (!isValidBackup(value)) {
+    throw new Error("Lecture Tracker 백업 JSON 파일이 아닙니다.");
+  }
+
+  const normalized = value.map(normalizeCourse);
+  writeCourses(normalized);
+  return getCourses();
 }
 
 export function getCourse(courseId: string): CourseWithLectures | null {

@@ -27,12 +27,6 @@ import type { CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/
 
 type StatusFilter = "ALL" | LectureStatus;
 type SectionAction = "COMPLETE" | "IN_PROGRESS";
-type SectionConfirm = {
-  action: SectionAction;
-  group: SectionGroup;
-  nextStatus: LectureStatus;
-  message: string;
-} | null;
 type SectionGroup = {
   section: Section;
   lectures: Lecture[];
@@ -41,7 +35,14 @@ type SectionGroup = {
   progressRate: number;
   allCompleted: boolean;
   allInProgress: boolean;
+  sectionMatchesSearch: boolean;
 };
+type SectionConfirm = {
+  action: SectionAction;
+  group: SectionGroup;
+  nextStatus: LectureStatus;
+  message: string;
+} | null;
 
 const statusOptions: { value: LectureStatus; label: string }[] = [
   { value: "NOT_STARTED", label: "미수강" },
@@ -107,9 +108,11 @@ export default function CourseDetailPage() {
     return [...course.sections]
       .sort((a, b) => a.order - b.order)
       .map((section) => {
+        const sectionMatchesSearch = keyword.length > 0 && section.title.toLowerCase().includes(keyword);
         const lectures = course.lectures.filter((lecture) => lecture.sectionId === section.id);
         const visibleLectures = lectures.filter((lecture) => {
-          const matchesSearch = keyword.length === 0 || lecture.title.toLowerCase().includes(keyword);
+          const matchesSearch =
+            keyword.length === 0 || sectionMatchesSearch || lecture.title.toLowerCase().includes(keyword);
           const matchesStatus = statusFilter === "ALL" || lecture.status === statusFilter;
           const matchesVisibility = !hideCompleted || lecture.status !== "COMPLETED";
 
@@ -120,7 +123,16 @@ export default function CourseDetailPage() {
         const allCompleted = lectures.length > 0 && lectures.every((lecture) => lecture.status === "COMPLETED");
         const allInProgress = lectures.length > 0 && lectures.every((lecture) => lecture.status === "IN_PROGRESS");
 
-        return { section, lectures, visibleLectures, completedCount, progressRate, allCompleted, allInProgress };
+        return {
+          section,
+          lectures,
+          visibleLectures,
+          completedCount,
+          progressRate,
+          allCompleted,
+          allInProgress,
+          sectionMatchesSearch,
+        };
       })
       .filter((group) => group.visibleLectures.length > 0 || group.lectures.length === 0);
   }, [course, hideCompleted, searchTerm, statusFilter]);
@@ -242,10 +254,10 @@ export default function CourseDetailPage() {
     const count = group.lectures.length;
     const message = isCompleteAction
       ? group.allCompleted
-        ? `이 섹션의 완강 상태를 모두 해제할까요?`
+        ? "이 섹션의 완강 상태를 모두 해제할까요?"
         : `이 섹션의 ${count}개 강의를 모두 완강 처리할까요?`
       : group.allInProgress
-        ? `이 섹션의 수강중 상태를 모두 해제할까요?`
+        ? "이 섹션의 수강중 상태를 모두 해제할까요?"
         : `이 섹션의 ${count}개 강의를 모두 수강중으로 변경할까요?`;
 
     setSectionConfirm({ action, group, nextStatus, message });
@@ -347,11 +359,11 @@ export default function CourseDetailPage() {
 
       <section className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
         <label className="block">
-          <span className="text-sm font-bold text-gray-900">강의명 검색</span>
+          <span className="text-sm font-bold text-gray-900">강의명 또는 섹션명 검색</span>
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="예: 법인세, OT"
+            placeholder="예: 법인세, OT, 1과목"
             className="mt-2 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </label>

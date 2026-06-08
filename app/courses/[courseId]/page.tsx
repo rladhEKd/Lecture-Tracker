@@ -26,12 +26,21 @@ import {
 import type { CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/types";
 
 type StatusFilter = "ALL" | LectureStatus;
+type SectionAction = "COMPLETE" | "IN_PROGRESS";
+type SectionConfirm = {
+  action: SectionAction;
+  group: SectionGroup;
+  nextStatus: LectureStatus;
+  message: string;
+} | null;
 type SectionGroup = {
   section: Section;
   lectures: Lecture[];
   visibleLectures: Lecture[];
   completedCount: number;
   progressRate: number;
+  allCompleted: boolean;
+  allInProgress: boolean;
 };
 
 const statusOptions: { value: LectureStatus; label: string }[] = [
@@ -57,6 +66,7 @@ export default function CourseDetailPage() {
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
   const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -65,6 +75,9 @@ export default function CourseDetailPage() {
     setCourseTitleDraft(nextCourse?.title ?? "");
     setLectureTitleDrafts(
       Object.fromEntries((nextCourse?.lectures ?? []).map((lecture) => [lecture.id, lecture.title])),
+    );
+    setCollapsedSections(
+      Object.fromEntries((nextCourse?.sections ?? []).map((section) => [section.id, true])),
     );
   }, [params.courseId]);
 
@@ -104,8 +117,10 @@ export default function CourseDetailPage() {
         });
         const completedCount = lectures.filter((lecture) => lecture.status === "COMPLETED").length;
         const progressRate = lectures.length === 0 ? 0 : Math.round((completedCount / lectures.length) * 100);
+        const allCompleted = lectures.length > 0 && lectures.every((lecture) => lecture.status === "COMPLETED");
+        const allInProgress = lectures.length > 0 && lectures.every((lecture) => lecture.status === "IN_PROGRESS");
 
-        return { section, lectures, visibleLectures, completedCount, progressRate };
+        return { section, lectures, visibleLectures, completedCount, progressRate, allCompleted, allInProgress };
       })
       .filter((group) => group.visibleLectures.length > 0 || group.lectures.length === 0);
   }, [course, hideCompleted, searchTerm, statusFilter]);
@@ -118,6 +133,10 @@ export default function CourseDetailPage() {
       clearTimeout(feedbackTimer.current);
     }
     feedbackTimer.current = setTimeout(() => setFeedback(""), 1400);
+  }
+
+  function refreshCourse() {
+    setCourse(getCourse(params.courseId));
   }
 
   function handleCourseTitleSave() {
@@ -182,7 +201,7 @@ export default function CourseDetailPage() {
     }
 
     deleteLecture(params.courseId, lectureId);
-    setCourse(getCourse(params.courseId));
+    refreshCourse();
     setLectureTitleDrafts((current) => {
       const next = { ...current };
       delete next[lectureId];
@@ -191,8 +210,9 @@ export default function CourseDetailPage() {
     showFeedback("삭제되었습니다");
   }
 
-  function handleStatusChange(lectureId: string, status: LectureStatus) {
-    const updatedLecture = updateLectureStatus(params.courseId, lectureId, status);
+  function handleLectureToggle(lecture: Lecture, targetStatus: Exclude<LectureStatus, "NOT_STARTED">) {
+    const nextStatus = lecture.status === targetStatus ? "NOT_STARTED" : targetStatus;
+    const updatedLecture = updateLectureStatus(params.courseId, lecture.id, nextStatus);
     if (!updatedLecture) {
       return;
     }
@@ -204,12 +224,45 @@ export default function CourseDetailPage() {
 
       return {
         ...current,
-        lectures: current.lectures.map((lecture) =>
-          lecture.id === lectureId ? updatedLecture : lecture,
-        ),
+        lectures: current.lectures.map((item) => (item.id === lecture.id ? updatedLecture : item)),
       };
     });
     showFeedback("상태가 변경되었습니다");
+  }
+
+  function openSectionConfirm(group: SectionGroup, action: SectionAction) {
+    const isCompleteAction = action === "COMPLETE";
+    const nextStatus: LectureStatus = isCompleteAction
+      ? group.allCompleted
+        ? "NOT_STARTED"
+        : "COMPLETED"
+      : group.allInProgress
+        ? "NOT_STARTED"
+        : "IN_PROGRESS";
+    const count = group.lectures.length;
+    const message = isCompleteAction
+      ? group.allCompleted
+        ? `이 섹션의 완강 상태를 모두 해제할까요?`
+        : `이 섹션의 ${count}개 강의를 모두 완강 처리할까요?`
+      : group.allInProgress
+        ? `이 섹션의 수강중 상태를 모두 해제할까요?`
+        : `이 섹션의 ${count}개 강의를 모두 수강중으로 변경할까요?`;
+
+    setSectionConfirm({ action, group, nextStatus, message });
+  }
+
+  function applySectionConfirm() {
+    if (!sectionConfirm) {
+      return;
+    }
+
+    sectionConfirm.group.lectures.forEach((lecture) => {
+      updateLectureStatus(params.courseId, lecture.id, sectionConfirm.nextStatus);
+    });
+
+    refreshCourse();
+    setSectionConfirm(null);
+    showFeedback("섹션 상태가 변경되었습니다");
   }
 
   function toggleSection(sectionId: string) {
@@ -345,9 +398,16 @@ export default function CourseDetailPage() {
         onDelete={handleLectureDelete}
         onEdit={setEditingLectureId}
         onSaveTitle={handleLectureTitleSave}
-        onStatusChange={handleStatusChange}
+        onSectionAction={openSectionConfirm}
+        onStatusToggle={handleLectureToggle}
         onToggleSection={toggleSection}
         visibleLectureCount={visibleLectureCount}
+      />
+
+      <ConfirmModal
+        confirm={sectionConfirm}
+        onCancel={() => setSectionConfirm(null)}
+        onConfirm={applySectionConfirm}
       />
     </main>
   );
@@ -363,7 +423,8 @@ function LectureSections({
   onDelete,
   onEdit,
   onSaveTitle,
-  onStatusChange,
+  onSectionAction,
+  onStatusToggle,
   onToggleSection,
   visibleLectureCount,
 }: {
@@ -376,7 +437,8 @@ function LectureSections({
   onDelete: (lectureId: string, title: string) => void;
   onEdit: (lectureId: string) => void;
   onSaveTitle: (lectureId: string) => void;
-  onStatusChange: (lectureId: string, status: LectureStatus) => void;
+  onSectionAction: (group: SectionGroup, action: SectionAction) => void;
+  onStatusToggle: (lecture: Lecture, status: Exclude<LectureStatus, "NOT_STARTED">) => void;
   onToggleSection: (sectionId: string) => void;
   visibleLectureCount: number;
 }) {
@@ -395,33 +457,51 @@ function LectureSections({
       ) : (
         <div className="space-y-3">
           {groups.map((group) => {
-            const isCollapsed = collapsedSections[group.section.id] ?? false;
+            const isCollapsed = collapsedSections[group.section.id] ?? true;
 
             return (
               <article key={group.section.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
-                <button
-                  type="button"
-                  onClick={() => onToggleSection(group.section.id)}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left active:bg-gray-100"
-                >
-                  {isCollapsed ? (
-                    <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-bold text-gray-950">{group.section.title}</h3>
-                    <div className="mt-1 flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
-                        <div className="h-full rounded-full bg-blue-500" style={{ width: `${group.progressRate}%` }} />
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <button
+                    type="button"
+                    onClick={() => onToggleSection(group.section.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left active:opacity-70"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-sm font-bold text-gray-950">{group.section.title}</h3>
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
+                          <div className="h-full rounded-full bg-blue-500" style={{ width: `${group.progressRate}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-blue-700">{group.progressRate}%</span>
                       </div>
-                      <span className="text-xs font-bold text-blue-700">{group.progressRate}%</span>
                     </div>
-                  </div>
-                  <span className="shrink-0 text-xs font-bold text-gray-500">
-                    {group.completedCount}/{group.lectures.length}
-                  </span>
-                </button>
+                    <span className="shrink-0 text-xs font-bold text-gray-500">
+                      {group.completedCount}/{group.lectures.length}
+                    </span>
+                  </button>
+                  <IconButton
+                    active={group.allInProgress}
+                    label="섹션 수강중 변경"
+                    tone="warning"
+                    onClick={() => onSectionAction(group, "IN_PROGRESS")}
+                  >
+                    <PlayCircle size={17} />
+                  </IconButton>
+                  <IconButton
+                    active={group.allCompleted}
+                    label="섹션 완강 변경"
+                    tone="success"
+                    onClick={() => onSectionAction(group, "COMPLETE")}
+                  >
+                    <CheckCircle2 size={17} />
+                  </IconButton>
+                </div>
 
                 {isCollapsed ? null : (
                   <div className="border-t border-gray-200">
@@ -436,7 +516,7 @@ function LectureSections({
                         onDelete={onDelete}
                         onEdit={onEdit}
                         onSaveTitle={onSaveTitle}
-                        onStatusChange={onStatusChange}
+                        onStatusToggle={onStatusToggle}
                       />
                     ))}
                   </div>
@@ -459,7 +539,7 @@ function LectureRow({
   onDelete,
   onEdit,
   onSaveTitle,
-  onStatusChange,
+  onStatusToggle,
 }: {
   draftTitle: string;
   isEditing: boolean;
@@ -469,7 +549,7 @@ function LectureRow({
   onDelete: (lectureId: string, title: string) => void;
   onEdit: (lectureId: string) => void;
   onSaveTitle: (lectureId: string) => void;
-  onStatusChange: (lectureId: string, status: LectureStatus) => void;
+  onStatusToggle: (lecture: Lecture, status: Exclude<LectureStatus, "NOT_STARTED">) => void;
 }) {
   const isCompleted = lecture.status === "COMPLETED";
   const isInProgress = lecture.status === "IN_PROGRESS";
@@ -521,17 +601,17 @@ function LectureRow({
           <>
             <IconButton
               active={isInProgress}
-              label="수강중으로 변경"
+              label="수강중 토글"
               tone="warning"
-              onClick={() => onStatusChange(lecture.id, "IN_PROGRESS")}
+              onClick={() => onStatusToggle(lecture, "IN_PROGRESS")}
             >
               <PlayCircle size={17} />
             </IconButton>
             <IconButton
               active={isCompleted}
-              label="완강으로 변경"
+              label="완강 토글"
               tone="success"
-              onClick={() => onStatusChange(lecture.id, "COMPLETED")}
+              onClick={() => onStatusToggle(lecture, "COMPLETED")}
             >
               <CheckCircle2 size={17} />
             </IconButton>
@@ -545,6 +625,46 @@ function LectureRow({
         )}
       </div>
     </article>
+  );
+}
+
+function ConfirmModal({
+  confirm,
+  onCancel,
+  onConfirm,
+}: {
+  confirm: SectionConfirm;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!confirm) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-4 pb-6 pt-20">
+      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-bold text-gray-950">섹션 상태 변경</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-600">{confirm.message}</p>
+        <p className="mt-1 text-xs font-bold text-gray-400">{confirm.group.section.title}</p>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-12 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="min-h-12 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

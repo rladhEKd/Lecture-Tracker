@@ -6,9 +6,18 @@ export type Course = {
   createdAt: string;
 };
 
+export type Section = {
+  id: string;
+  courseId: string;
+  title: string;
+  order: number;
+  createdAt: string;
+};
+
 export type Lecture = {
   id: string;
   courseId: string;
+  sectionId: string;
   title: string;
   status: LectureStatus;
   completedAt: string | null;
@@ -16,5 +25,6 @@ export type Lecture = {
 };
 
 export type CourseWithLectures = Course & {
+  sections: Section[];
   lectures: Lecture[];
 };

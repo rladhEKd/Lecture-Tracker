@@ -14,22 +14,23 @@ export default function NewCoursePage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const lectureTitles = lectureText
+    const lines = lectureText
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
+    const lectureCount = lines.filter((line) => !line.startsWith("# ")).length;
 
     if (!title.trim()) {
       setError("강의명을 입력하세요.");
       return;
     }
 
-    if (lectureTitles.length === 0) {
+    if (lectureCount === 0) {
       setError("강의 목록을 한 줄 이상 입력하세요.");
       return;
     }
 
-    const course = createCourse(title.trim(), lectureTitles);
+    const course = createCourse(title.trim(), lines);
     router.push(`/courses/${course.id}`);
   }
 
@@ -41,7 +42,7 @@ export default function NewCoursePage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold text-gray-950">새 강의 등록</h1>
         <p className="mt-2 text-sm leading-6 text-gray-500">
-          강의 목록은 줄 단위로 저장됩니다. 한 줄에 하나의 강의를 입력하세요.
+          대제목은 <span className="font-bold text-gray-800"># </span>로 시작하세요. 그 외 줄은 직전 대제목의 강의로 저장됩니다.
         </p>
       </header>
 
@@ -51,7 +52,7 @@ export default function NewCoursePage() {
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="2026 세법학 기본이론"
+            placeholder="2026 정보처리기사 필기"
             className="mt-2 min-h-14 w-full rounded-lg border border-gray-300 bg-white px-4 text-base text-gray-950 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-100"
           />
         </label>
@@ -61,7 +62,9 @@ export default function NewCoursePage() {
           <textarea
             value={lectureText}
             onChange={(event) => setLectureText(event.target.value)}
-            placeholder={"1강 OT\n2강 법인세 총론\n3강 익금\n4강 손금"}
+            placeholder={
+              "# 1과목. 소프트웨어 구축\n1강 소프트웨어 공학\n2강 요구사항 분석\n# 2과목. 데이터베이스 구축\n3강 데이터베이스 개념\n4강 SQL"
+            }
             rows={12}
             className="mt-2 w-full resize-y rounded-lg border border-gray-300 bg-white px-4 py-3 text-base leading-7 text-gray-950 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-100"
           />

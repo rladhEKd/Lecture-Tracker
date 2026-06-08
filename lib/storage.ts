@@ -1,8 +1,14 @@
 "use client";
 
-import type { Course, CourseWithLectures, Lecture, LectureStatus } from "@/lib/types";
+import type { Course, CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/types";
 
 const STORAGE_KEY = "lecture-tracker:courses";
+const DEFAULT_SECTION_TITLE = "기본 섹션";
+
+type StoredCourse = Course & {
+  sections?: Section[];
+  lectures?: (Omit<Lecture, "sectionId"> & { sectionId?: string })[];
+};
 
 function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -10,6 +16,48 @@ function createId() {
   }
 
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function createDefaultSection(courseId: string, createdAt: string): Section {
+  return {
+    id: `${courseId}:default-section`,
+    courseId,
+    title: DEFAULT_SECTION_TITLE,
+    order: 0,
+    createdAt,
+  };
+}
+
+function normalizeCourse(course: StoredCourse): CourseWithLectures {
+  const defaultSection = createDefaultSection(course.id, course.createdAt);
+  const sections =
+    Array.isArray(course.sections) && course.sections.length > 0
+      ? course.sections.map((section, index) => ({
+          ...section,
+          courseId: course.id,
+          order: typeof section.order === "number" ? section.order : index,
+        }))
+      : [defaultSection];
+
+  const sectionIds = new Set(sections.map((section) => section.id));
+  const fallbackSectionId = sections[0]?.id ?? defaultSection.id;
+  const lectures = (course.lectures ?? []).map((lecture) => {
+    const sectionId = lecture.sectionId && sectionIds.has(lecture.sectionId) ? lecture.sectionId : fallbackSectionId;
+
+    return {
+      ...lecture,
+      courseId: course.id,
+      sectionId,
+    };
+  });
+
+  return {
+    id: course.id,
+    title: course.title,
+    createdAt: course.createdAt,
+    sections,
+    lectures,
+  };
 }
 
 function readCourses(): CourseWithLectures[] {
@@ -23,8 +71,17 @@ function readCourses(): CourseWithLectures[] {
       return [];
     }
 
-    const parsed = JSON.parse(raw) as CourseWithLectures[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as StoredCourse[];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const normalized = parsed.map(normalizeCourse);
+    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+      writeCourses(normalized);
+    }
+
+    return normalized;
   } catch {
     return [];
   }
@@ -32,6 +89,64 @@ function readCourses(): CourseWithLectures[] {
 
 function writeCourses(courses: CourseWithLectures[]) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(courses));
+}
+
+function parseCourseLines(courseId: string, lines: string[], createdAt: string) {
+  const sections: Section[] = [];
+  const lectures: Lecture[] = [];
+  let currentSection: Section | null = null;
+
+  function ensureSection() {
+    if (currentSection) {
+      return currentSection;
+    }
+
+    currentSection = {
+      id: createId(),
+      courseId,
+      title: DEFAULT_SECTION_TITLE,
+      order: sections.length,
+      createdAt,
+    };
+    sections.push(currentSection);
+    return currentSection;
+  }
+
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) {
+      return;
+    }
+
+    if (trimmedLine.startsWith("# ")) {
+      currentSection = {
+        id: createId(),
+        courseId,
+        title: trimmedLine.replace(/^#\s+/, "").trim() || DEFAULT_SECTION_TITLE,
+        order: sections.length,
+        createdAt: new Date(Date.now() + index).toISOString(),
+      };
+      sections.push(currentSection);
+      return;
+    }
+
+    const section = ensureSection();
+    lectures.push({
+      id: createId(),
+      courseId,
+      sectionId: section.id,
+      title: trimmedLine,
+      status: "NOT_STARTED",
+      completedAt: null,
+      createdAt: new Date(Date.now() + index).toISOString(),
+    });
+  });
+
+  if (sections.length === 0) {
+    sections.push(createDefaultSection(courseId, createdAt));
+  }
+
+  return { sections, lectures };
 }
 
 export function getCourses(): CourseWithLectures[] {
@@ -73,26 +188,17 @@ export function updateCourseTitle(courseId: string, title: string): CourseWithLe
   return updatedCourse;
 }
 
-export function createCourse(title: string, lectureTitles: string[]): Course {
+export function createCourse(title: string, lines: string[]): Course {
   const now = new Date().toISOString();
+  const courseId = createId();
+  const { sections, lectures } = parseCourseLines(courseId, lines, now);
   const course: CourseWithLectures = {
-    id: createId(),
+    id: courseId,
     title,
     createdAt: now,
-    lectures: lectureTitles.map((lectureTitle, index) => ({
-      id: createId(),
-      courseId: "",
-      title: lectureTitle,
-      status: "NOT_STARTED",
-      completedAt: null,
-      createdAt: new Date(Date.now() + index).toISOString(),
-    })),
+    sections,
+    lectures,
   };
-
-  course.lectures = course.lectures.map((lecture) => ({
-    ...lecture,
-    courseId: course.id,
-  }));
 
   const courses = readCourses();
   writeCourses([course, ...courses]);

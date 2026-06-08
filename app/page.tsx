@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getCourses } from "@/lib/storage";
+import { deleteCourse, getCourses } from "@/lib/storage";
 import type { CourseWithLectures } from "@/lib/types";
 
 function getProgress(course: CourseWithLectures) {
@@ -34,6 +34,16 @@ export default function Home() {
 
     return { totalLectureCount, completedLectureCount, averageProgress };
   }, [courses]);
+
+  function handleDeleteCourse(courseId: string, title: string) {
+    const confirmed = window.confirm(`"${title}" 강의를 삭제할까요?\n연결된 강의 목록도 함께 삭제됩니다.`);
+    if (!confirmed) {
+      return;
+    }
+
+    deleteCourse(courseId);
+    setCourses(getCourses());
+  }
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-screen-sm flex-col bg-white px-5 pb-10 pt-[max(24px,env(safe-area-inset-top))]">
@@ -85,24 +95,32 @@ export default function Home() {
               const progress = getProgress(course);
 
               return (
-                <Link
+                <article
                   key={course.id}
-                  href={`/courses/${course.id}`}
-                  className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm active:bg-gray-50"
+                  className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
-                      <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
+                  <Link href={`/courses/${course.id}`} className="block active:bg-gray-50">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
+                        <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-green-50 px-3 py-1 text-sm font-bold text-green-700">
+                        {progress}%
+                      </span>
                     </div>
-                    <span className="shrink-0 rounded-full bg-green-50 px-3 py-1 text-sm font-bold text-green-700">
-                      {progress}%
-                    </span>
-                  </div>
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-100">
-                    <div className="h-full rounded-full bg-green-500" style={{ width: `${progress}%` }} />
-                  </div>
-                </Link>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div className="h-full rounded-full bg-green-500" style={{ width: `${progress}%` }} />
+                    </div>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCourse(course.id, course.title)}
+                    className="mt-4 min-h-10 w-full rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700 active:bg-red-100"
+                  >
+                    삭제
+                  </button>
+                </article>
               );
             })}
           </div>

@@ -42,6 +42,37 @@ export function getCourse(courseId: string): CourseWithLectures | null {
   return readCourses().find((course) => course.id === courseId) ?? null;
 }
 
+export function deleteCourse(courseId: string) {
+  const courses = readCourses();
+  writeCourses(courses.filter((course) => course.id !== courseId));
+}
+
+export function updateCourseTitle(courseId: string, title: string): CourseWithLectures | null {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    return null;
+  }
+
+  const courses = readCourses();
+  let updatedCourse: CourseWithLectures | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    updatedCourse = {
+      ...course,
+      title: nextTitle,
+    };
+
+    return updatedCourse;
+  });
+
+  writeCourses(nextCourses);
+  return updatedCourse;
+}
+
 export function createCourse(title: string, lectureTitles: string[]): Course {
   const now = new Date().toISOString();
   const course: CourseWithLectures = {
@@ -102,4 +133,60 @@ export function updateLectureStatus(
 
   writeCourses(nextCourses);
   return updatedLecture;
+}
+
+export function updateLectureTitle(
+  courseId: string,
+  lectureId: string,
+  title: string,
+): Lecture | null {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    return null;
+  }
+
+  const courses = readCourses();
+  let updatedLecture: Lecture | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    return {
+      ...course,
+      lectures: course.lectures.map((lecture) => {
+        if (lecture.id !== lectureId) {
+          return lecture;
+        }
+
+        updatedLecture = {
+          ...lecture,
+          title: nextTitle,
+        };
+
+        return updatedLecture;
+      }),
+    };
+  });
+
+  writeCourses(nextCourses);
+  return updatedLecture;
+}
+
+export function deleteLecture(courseId: string, lectureId: string) {
+  const courses = readCourses();
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    return {
+      ...course,
+      lectures: course.lectures.filter((lecture) => lecture.id !== lectureId),
+    };
+  });
+
+  writeCourses(nextCourses);
 }

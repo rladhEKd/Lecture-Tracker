@@ -42,21 +42,22 @@ function getSectionPlanSummaries(course: CourseWithLectures) {
   const today = getKoreaTodayDateString();
   const summaries = course.sections
     .map((section) => {
-      if (!section.planStartDate || !section.planEndDate || !section.dailyTargetCount) {
+      if (!section.planStartDate || !section.dailyTargetCount) {
         return null;
       }
 
       const sectionLectures = course.lectures.filter((lecture) => lecture.sectionId === section.id);
       const totalCount = sectionLectures.length;
       const completedCount = sectionLectures.filter((lecture) => lecture.status === "COMPLETED").length;
+      const hasEnded = Boolean(section.planEndDate && today > section.planEndDate);
       const elapsedDays =
         today < section.planStartDate
           ? 0
-          : today > section.planEndDate
+          : hasEnded
             ? totalCount
             : getDateDiffDays(section.planStartDate, today) + 1;
       const requiredCount =
-        today > section.planEndDate
+        hasEnded
           ? totalCount
           : Math.min(totalCount, Math.max(0, elapsedDays) * section.dailyTargetCount);
       const overdueCount = Math.max(0, requiredCount - completedCount);

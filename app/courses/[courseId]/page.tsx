@@ -764,65 +764,69 @@ function SectionPlanModal({
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-4 pb-6 pt-20">
-      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-5 shadow-xl">
-        <h2 className="text-lg font-bold text-gray-950">계획 수정</h2>
-        <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.sectionTitle}</p>
-        <div className="mt-4 space-y-3">
-          <label className="block">
-            <span className="text-sm font-bold text-gray-800">시작 날짜</span>
-            <input
-              type="date"
-              value={draft.planStartDate}
-              onChange={(event) =>
-                onChange((current) =>
-                  current ? { ...current, planStartDate: event.target.value } : current,
-                )
-              }
-              className="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-bold text-gray-800">종료 날짜</span>
-            <input
-              type="date"
-              value={draft.planEndDate}
-              onChange={(event) =>
-                onChange((current) =>
-                  current ? { ...current, planEndDate: event.target.value } : current,
-                )
-              }
-              className="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-bold text-gray-800">하루 목표 강의 수</span>
-            <input
-              type="number"
-              min="1"
-              inputMode="numeric"
-              value={draft.dailyTargetCount}
-              onChange={(event) =>
-                onChange((current) =>
-                  current ? { ...current, dailyTargetCount: event.target.value } : current,
-                )
-              }
-              className="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-            />
-          </label>
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))]">
+      <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-screen-sm flex-col rounded-2xl bg-white shadow-xl">
+        <div className="shrink-0 px-4 pt-4">
+          <h2 className="text-lg font-bold text-gray-950">계획 수정</h2>
+          <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.sectionTitle}</p>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <div className="space-y-2.5">
+            <label className="block">
+              <span className="text-sm font-bold text-gray-800">시작 날짜</span>
+              <input
+                type="date"
+                value={draft.planStartDate}
+                onChange={(event) =>
+                  onChange((current) =>
+                    current ? { ...current, planStartDate: event.target.value } : current,
+                  )
+                }
+                className="mt-1 min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-bold text-gray-800">종료 날짜</span>
+              <input
+                type="date"
+                value={draft.planEndDate}
+                onChange={(event) =>
+                  onChange((current) =>
+                    current ? { ...current, planEndDate: event.target.value } : current,
+                  )
+                }
+                className="mt-1 min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-bold text-gray-800">하루 목표 강의 수</span>
+              <input
+                type="number"
+                min="1"
+                inputMode="numeric"
+                value={draft.dailyTargetCount}
+                onChange={(event) =>
+                  onChange((current) =>
+                    current ? { ...current, dailyTargetCount: event.target.value } : current,
+                  )
+                }
+                className="mt-1 min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+        </div>
+        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-gray-100 px-4 pb-4 pt-3">
           <button
             type="button"
             onClick={onCancel}
-            className="min-h-12 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+            className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
           >
             취소
           </button>
           <button
             type="button"
             onClick={onSave}
-            className="min-h-12 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+            className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
           >
             저장
           </button>

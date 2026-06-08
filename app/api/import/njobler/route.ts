@@ -43,17 +43,23 @@ function getCourseTitle(lines: string[]) {
   return lines.find((line) => line.includes("정보처리") || line.includes("클래스"))?.replace(/^#+\s*/, "");
 }
 
-function isLessonLine(line: string) {
+function isDurationLine(line: string) {
+  return /^\d+\s*분$/.test(line);
+}
+
+function isNumberedLessonLine(line: string) {
   return /^\d+\.\s+.+/.test(line);
 }
 
-function cleanLessonTitle(line: string, lessonNumber: number) {
-  const title = line
+function parseOriginalLessonNumber(line: string) {
+  return line.match(/^(\d+)\.\s+(.+)/);
+}
+
+function cleanNumberedLessonTitle(line: string) {
+  return line
     .replace(/^\d+\.\s+/, "")
     .replace(/\s+\d+\s*분.*$/, "")
     .trim();
-
-  return `${lessonNumber}강 ${title}`;
 }
 
 function isNoiseLine(line: string) {
@@ -67,137 +73,87 @@ function isNoiseLine(line: string) {
     line.includes("추천도서") ||
     line.includes("클래스 후기") ||
     line.includes("환불정책") ||
-    line.includes("추천클래스")
+    line.includes("추천클래스") ||
+    line.includes("바로결제") ||
+    line.includes("장바구니")
   );
 }
 
-function isDurationLine(line: string) {
-  return /^\d+\s*분$/.test(line);
+function isSectionCandidate(line: string) {
+  return Boolean(line) && !isNoiseLine(line) && !isDurationLine(line) && !isNumberedLessonLine(line);
 }
 
-function htmlToPlainText(html: string) {
-  return decodeHtml(
-    html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/?(p|div|li|ul|ol|h[1-6]|tr|td|section|article|button|span)[^>]*>/gi, "\n")
-      .replace(/<[^>]+>/g, " "),
-  ).replace(/\r/g, "");
-}
-
-function extractSectionCandidate(value: string) {
-  const candidates = value
-    .split(/\n+/)
-    .map((line) =>
-      line
-        .replace(/\s+/g, " ")
-        .replace(/무료보기/g, "")
-        .replace(/아이콘/g, "")
-        .trim(),
-    )
-    .filter((line) => line && !isNoiseLine(line) && !isLessonLine(line) && !/^\d+\./.test(line));
-
-  return candidates.at(-1);
-}
-
-function parseCurriculumByPattern(html: string): ParsedCurriculum {
-  const text = htmlToPlainText(html);
-  const startIndex = text.indexOf("커리큘럼");
+function extractCurriculumLines(lines: string[]) {
+  const startIndex = lines.findLastIndex((line) => line.includes("· 커리큘럼") || line === "커리큘럼");
   if (startIndex < 0) {
     throw new Error("커리큘럼 영역을 찾지 못했습니다.");
   }
 
-  const afterStart = text.slice(startIndex);
-  const creatorIndex = afterStart.indexOf("크리에이터", 20);
-  const curriculumText = creatorIndex >= 0 ? afterStart.slice(0, creatorIndex) : afterStart;
-  const lessonRegex = /(\d+)\.\s+(.{1,120}?)(?=\s+\d+\s*분|\n|$)/g;
-  const output: string[] = [];
-  const seenSections = new Set<string>();
-  let lastEnd = 0;
-  let sectionCount = 0;
-  let lectureCount = 0;
-  let match: RegExpExecArray | null;
+  const afterStart = lines.slice(startIndex + 1);
+  const endIndex = afterStart.findIndex((line, index) => index > 5 && line.includes("· 크리에이터"));
 
-  while ((match = lessonRegex.exec(curriculumText)) !== null) {
-    const sectionTitle = extractSectionCandidate(curriculumText.slice(lastEnd, match.index));
-    if (sectionTitle && !seenSections.has(sectionTitle)) {
-      seenSections.add(sectionTitle);
-      sectionCount += 1;
-      output.push(`# ${sectionTitle}`);
-    }
-
-    lectureCount += 1;
-    output.push(`${lectureCount}강 ${match[2].replace(/\s+/g, " ").replace(/\s+\d+\s*분.*$/, "").trim()}`);
-    lastEnd = lessonRegex.lastIndex;
-  }
-
-  if (lectureCount === 0) {
-    throw new Error("가져올 수 있는 강의 목록을 찾지 못했습니다.");
-  }
-
-  return {
-    title: getCourseTitle(htmlToLines(html)),
-    text: output.join("\n"),
-    sectionCount,
-    lectureCount,
-  };
+  return (endIndex >= 0 ? afterStart.slice(0, endIndex) : afterStart).filter((line) => !isNoiseLine(line));
 }
 
 function parseCurriculum(html: string): ParsedCurriculum {
   const lines = htmlToLines(html);
-  const startIndex = lines.findLastIndex((line) => line.includes("· 커리큘럼") || line === "커리큘럼");
-  if (startIndex < 0) {
-    return parseCurriculumByPattern(html);
-  }
-
-  const afterStart = lines.slice(startIndex + 1);
-  const endIndex = afterStart.findIndex((line, index) => index > 5 && line.includes("· 크리에이터"));
-  const curriculumLines = (endIndex >= 0 ? afterStart.slice(0, endIndex) : afterStart).filter(
-    (line) => !isNoiseLine(line),
-  );
-
+  const curriculumLines = extractCurriculumLines(lines);
   const output: string[] = [];
   const seenSections = new Set<string>();
+  let currentSectionId = "";
   let sectionCount = 0;
   let lectureCount = 0;
+  let sectionLectureIndex = 0;
+
+  function startSection(title: string) {
+    if (seenSections.has(title)) {
+      currentSectionId = title;
+      return;
+    }
+
+    seenSections.add(title);
+    currentSectionId = title;
+    sectionLectureIndex = 0;
+    sectionCount += 1;
+    output.push(`# ${title}`);
+  }
+
+  function pushLecture(title: string, originalNumber?: string) {
+    lectureCount += 1;
+    sectionLectureIndex += 1;
+    output.push(`${originalNumber ?? sectionLectureIndex}. ${title}`);
+  }
 
   curriculumLines.forEach((line, index) => {
-    if (isLessonLine(line)) {
-      lectureCount += 1;
-      output.push(cleanLessonTitle(line, lectureCount));
+    const numberedMatch = parseOriginalLessonNumber(line);
+    if (numberedMatch) {
+      const sectionTitle = findNearestSectionTitle(curriculumLines, index);
+      if (sectionTitle && sectionTitle !== currentSectionId) {
+        startSection(sectionTitle);
+      }
+      pushLecture(cleanNumberedLessonTitle(line), numberedMatch[1]);
       return;
     }
 
-    if (isDurationLine(line)) {
-      const lectureTitle = curriculumLines[index - 1];
-      if (!lectureTitle || isNoiseLine(lectureTitle) || isDurationLine(lectureTitle)) {
-        return;
-      }
-
-      const sectionTitle = curriculumLines[index - 2];
-      if (
-        sectionTitle &&
-        sectionTitle !== lectureTitle &&
-        !isNoiseLine(sectionTitle) &&
-        !isDurationLine(sectionTitle) &&
-        !seenSections.has(sectionTitle)
-      ) {
-        seenSections.add(sectionTitle);
-        sectionCount += 1;
-        output.push(`# ${sectionTitle}`);
-      }
-
-      lectureCount += 1;
-      output.push(`${lectureCount}강 ${lectureTitle}`);
+    if (!isDurationLine(line)) {
       return;
     }
 
-    return;
+    const lectureTitle = curriculumLines[index - 1];
+    if (!lectureTitle || !isSectionCandidate(lectureTitle)) {
+      return;
+    }
+
+    const sectionTitle = findNearestSectionTitle(curriculumLines, index - 1);
+    if (sectionTitle && sectionTitle !== currentSectionId) {
+      startSection(sectionTitle);
+    }
+
+    pushLecture(lectureTitle);
   });
 
   if (lectureCount === 0) {
-    return parseCurriculumByPattern(html);
+    throw new Error("가져올 수 있는 강의 목록을 찾지 못했습니다.");
   }
 
   return {
@@ -206,6 +162,21 @@ function parseCurriculum(html: string): ParsedCurriculum {
     sectionCount,
     lectureCount,
   };
+}
+
+function findNearestSectionTitle(lines: string[], lectureTitleIndex: number) {
+  for (let index = lectureTitleIndex - 1; index >= Math.max(0, lectureTitleIndex - 5); index -= 1) {
+    const candidate = lines[index];
+    if (isDurationLine(candidate)) {
+      break;
+    }
+
+    if (isSectionCandidate(candidate) && candidate !== lines[lectureTitleIndex]) {
+      return candidate;
+    }
+  }
+
+  return undefined;
 }
 
 async function readHtml(response: Response) {

@@ -149,12 +149,12 @@ export default function NewCoursePage() {
               <input
                 value={importUrl}
                 onChange={(event) => setImportUrl(event.target.value)}
-                placeholder="njobler.net 또는 uricpa.com 강의 상세 URL"
+                placeholder="njobler.net, uricpa.com, namucpa.com 강의 상세 URL"
                 className="mt-2 min-h-12 w-full rounded-lg border border-blue-200 bg-white px-4 text-base text-gray-950 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               />
             </label>
             <p className="mt-2 text-xs font-bold leading-5 text-blue-700">
-              현재 njobler.net, uricpa.com 강의 상세 페이지를 지원합니다.
+              현재 njobler.net, uricpa.com, namucpa.com 강의 상세 페이지를 지원합니다.
             </p>
             <button
               type="button"

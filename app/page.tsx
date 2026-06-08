@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteCourse, getCourses } from "@/lib/storage";
 import type { CourseWithLectures } from "@/lib/types";
 
@@ -20,20 +20,6 @@ export default function Home() {
   useEffect(() => {
     setCourses(getCourses());
   }, []);
-
-  const summary = useMemo(() => {
-    const totalLectureCount = courses.reduce((sum, course) => sum + course.lectures.length, 0);
-    const completedLectureCount = courses.reduce(
-      (sum, course) => sum + course.lectures.filter((lecture) => lecture.status === "COMPLETED").length,
-      0,
-    );
-    const averageProgress =
-      courses.length === 0
-        ? 0
-        : Math.round(courses.reduce((sum, course) => sum + getProgress(course), 0) / courses.length);
-
-    return { totalLectureCount, completedLectureCount, averageProgress };
-  }, [courses]);
 
   function handleDeleteCourse(courseId: string, title: string) {
     const confirmed = window.confirm(`"${title}" 강의를 삭제할까요?\n연결된 강의 목록도 함께 삭제됩니다.`);
@@ -70,13 +56,7 @@ export default function Home() {
         </Link>
       </section>
 
-      <section className="mt-5 grid grid-cols-3 gap-3">
-        <SummaryCard label="전체 강의 수" value={String(summary.totalLectureCount)} />
-        <SummaryCard label="완료 강의 수" value={String(summary.completedLectureCount)} />
-        <SummaryCard label="평균 진도율" value={`${summary.averageProgress}%`} />
-      </section>
-
-      <section className="mt-8 flex-1">
+      <section className="mt-6 flex-1">
         <div className="mb-3 flex items-end justify-between">
           <h2 className="text-lg font-bold text-gray-950">내 강의</h2>
           <span className="text-sm font-medium text-gray-500">{courses.length}개 과정</span>
@@ -86,7 +66,7 @@ export default function Home() {
           <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
             <p className="text-base font-bold text-gray-900">아직 등록된 강의가 없습니다</p>
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              첫 강의를 추가하면 전체 진도와 완료 현황을 한눈에 볼 수 있습니다.
+              첫 강의를 추가하면 진도와 완료 현황을 관리할 수 있습니다.
             </p>
           </div>
         ) : (
@@ -127,15 +107,6 @@ export default function Home() {
         )}
       </section>
     </main>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-      <p className="min-h-8 text-xs font-bold leading-4 text-gray-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-gray-950">{value}</p>
-    </div>
   );
 }
 

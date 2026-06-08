@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
-  Clock3,
+  MoreHorizontal,
   Pencil,
   PlayCircle,
   Trash2,
@@ -66,6 +66,7 @@ export default function CourseDetailPage() {
   const [lectureTitleDrafts, setLectureTitleDrafts] = useState<Record<string, string>>({});
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
   const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
+  const [openLectureMenuId, setOpenLectureMenuId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
   const [feedback, setFeedback] = useState("");
@@ -214,6 +215,7 @@ export default function CourseDetailPage() {
 
     deleteLecture(params.courseId, lectureId);
     refreshCourse();
+    setOpenLectureMenuId(null);
     setLectureTitleDrafts((current) => {
       const next = { ...current };
       delete next[lectureId];
@@ -222,8 +224,13 @@ export default function CourseDetailPage() {
     showFeedback("삭제되었습니다");
   }
 
-  function handleLectureToggle(lecture: Lecture, targetStatus: Exclude<LectureStatus, "NOT_STARTED">) {
-    const nextStatus = lecture.status === targetStatus ? "NOT_STARTED" : targetStatus;
+  function handleLectureToggle(lecture: Lecture) {
+    const nextStatus: LectureStatus =
+      lecture.status === "NOT_STARTED"
+        ? "IN_PROGRESS"
+        : lecture.status === "IN_PROGRESS"
+          ? "COMPLETED"
+          : "NOT_STARTED";
     const updatedLecture = updateLectureStatus(params.courseId, lecture.id, nextStatus);
     if (!updatedLecture) {
       return;
@@ -240,6 +247,15 @@ export default function CourseDetailPage() {
       };
     });
     showFeedback("상태가 변경되었습니다");
+  }
+
+  function handleLectureEditStart(lectureId: string) {
+    setEditingLectureId(lectureId);
+    setOpenLectureMenuId(null);
+  }
+
+  function handleLectureMenuToggle(lectureId: string) {
+    setOpenLectureMenuId((current) => (current === lectureId ? null : lectureId));
   }
 
   function openSectionConfirm(group: SectionGroup, action: SectionAction) {
@@ -405,10 +421,12 @@ export default function CourseDetailPage() {
         editingLectureId={editingLectureId}
         groups={sectionGroups}
         lectureTitleDrafts={lectureTitleDrafts}
+        openLectureMenuId={openLectureMenuId}
         onCancelEdit={handleLectureTitleCancel}
         onChangeDraft={setLectureTitleDrafts}
         onDelete={handleLectureDelete}
-        onEdit={setEditingLectureId}
+        onEdit={handleLectureEditStart}
+        onLectureMenuToggle={handleLectureMenuToggle}
         onSaveTitle={handleLectureTitleSave}
         onSectionAction={openSectionConfirm}
         onStatusToggle={handleLectureToggle}
@@ -430,10 +448,12 @@ function LectureSections({
   editingLectureId,
   groups,
   lectureTitleDrafts,
+  openLectureMenuId,
   onCancelEdit,
   onChangeDraft,
   onDelete,
   onEdit,
+  onLectureMenuToggle,
   onSaveTitle,
   onSectionAction,
   onStatusToggle,
@@ -444,13 +464,15 @@ function LectureSections({
   editingLectureId: string | null;
   groups: SectionGroup[];
   lectureTitleDrafts: Record<string, string>;
+  openLectureMenuId: string | null;
   onCancelEdit: (lectureId: string) => void;
   onChangeDraft: Dispatch<SetStateAction<Record<string, string>>>;
   onDelete: (lectureId: string, title: string) => void;
   onEdit: (lectureId: string) => void;
+  onLectureMenuToggle: (lectureId: string) => void;
   onSaveTitle: (lectureId: string) => void;
   onSectionAction: (group: SectionGroup, action: SectionAction) => void;
-  onStatusToggle: (lecture: Lecture, status: Exclude<LectureStatus, "NOT_STARTED">) => void;
+  onStatusToggle: (lecture: Lecture) => void;
   onToggleSection: (sectionId: string) => void;
   visibleLectureCount: number;
 }) {
@@ -522,11 +544,13 @@ function LectureSections({
                         key={lecture.id}
                         draftTitle={lectureTitleDrafts[lecture.id] ?? lecture.title}
                         isEditing={editingLectureId === lecture.id}
+                        isMenuOpen={openLectureMenuId === lecture.id}
                         lecture={lecture}
                         onCancelEdit={onCancelEdit}
                         onChangeDraft={onChangeDraft}
                         onDelete={onDelete}
                         onEdit={onEdit}
+                        onMenuToggle={onLectureMenuToggle}
                         onSaveTitle={onSaveTitle}
                         onStatusToggle={onStatusToggle}
                       />
@@ -545,34 +569,54 @@ function LectureSections({
 function LectureRow({
   draftTitle,
   isEditing,
+  isMenuOpen,
   lecture,
   onCancelEdit,
   onChangeDraft,
   onDelete,
   onEdit,
+  onMenuToggle,
   onSaveTitle,
   onStatusToggle,
 }: {
   draftTitle: string;
   isEditing: boolean;
+  isMenuOpen: boolean;
   lecture: Lecture;
   onCancelEdit: (lectureId: string) => void;
   onChangeDraft: Dispatch<SetStateAction<Record<string, string>>>;
   onDelete: (lectureId: string, title: string) => void;
   onEdit: (lectureId: string) => void;
+  onMenuToggle: (lectureId: string) => void;
   onSaveTitle: (lectureId: string) => void;
-  onStatusToggle: (lecture: Lecture, status: Exclude<LectureStatus, "NOT_STARTED">) => void;
+  onStatusToggle: (lecture: Lecture) => void;
 }) {
   const isCompleted = lecture.status === "COMPLETED";
-  const isInProgress = lecture.status === "IN_PROGRESS";
 
   return (
     <article
-      className={`flex min-h-[58px] items-center gap-2 border-b px-3 py-2.5 last:border-b-0 ${
+      className={`relative flex min-h-[46px] items-center gap-2 border-b px-2.5 py-1.5 last:border-b-0 ${
         isCompleted ? "border-green-100 bg-green-50" : "border-gray-200 bg-gray-50"
       }`}
     >
-      <StatusIcon status={lecture.status} />
+      {isEditing ? (
+        <StatusIcon status={lecture.status} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => onStatusToggle(lecture)}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${
+            lecture.status === "COMPLETED"
+              ? "border-green-500 bg-green-500 text-white active:bg-green-600"
+              : lecture.status === "IN_PROGRESS"
+                ? "border-yellow-200 bg-yellow-50 text-yellow-700 active:bg-yellow-100"
+                : "border-gray-200 bg-white text-gray-400 active:bg-gray-100"
+          }`}
+          aria-label="강의 상태 변경"
+        >
+          <StatusIcon status={lecture.status} />
+        </button>
+      )}
 
       <div className="min-w-0 flex-1">
         {isEditing ? (
@@ -584,7 +628,7 @@ function LectureRow({
                 [lecture.id]: event.target.value,
               }))
             }
-            className="min-h-10 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            className="min-h-9 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             aria-label={`${lecture.title} 제목`}
           />
         ) : (
@@ -611,28 +655,29 @@ function LectureRow({
           </>
         ) : (
           <>
-            <IconButton
-              active={isInProgress}
-              label="수강중 토글"
-              tone="warning"
-              onClick={() => onStatusToggle(lecture, "IN_PROGRESS")}
-            >
-              <PlayCircle size={17} />
+            <IconButton label="강의 메뉴 열기" tone="neutral" onClick={() => onMenuToggle(lecture.id)}>
+              <MoreHorizontal size={17} />
             </IconButton>
-            <IconButton
-              active={isCompleted}
-              label="완강 토글"
-              tone="success"
-              onClick={() => onStatusToggle(lecture, "COMPLETED")}
-            >
-              <CheckCircle2 size={17} />
-            </IconButton>
-            <IconButton label="강의 제목 수정" tone="neutral" onClick={() => onEdit(lecture.id)}>
-              <Pencil size={16} />
-            </IconButton>
-            <IconButton label="강의 삭제" tone="danger" onClick={() => onDelete(lecture.id, lecture.title)}>
-              <Trash2 size={16} />
-            </IconButton>
+            {isMenuOpen ? (
+              <div className="absolute right-2 top-10 z-10 w-28 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => onEdit(lecture.id)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+                >
+                  <Pencil size={15} />
+                  수정
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(lecture.id, lecture.title)}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-600 active:bg-red-50"
+                >
+                  <Trash2 size={15} />
+                  삭제
+                </button>
+              </div>
+            ) : null}
           </>
         )}
       </div>
@@ -682,14 +727,14 @@ function ConfirmModal({
 
 function StatusIcon({ status }: { status: LectureStatus }) {
   if (status === "COMPLETED") {
-    return <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" aria-label="완강" />;
+    return <CheckCircle2 className="h-5 w-5 shrink-0" aria-label="완강" />;
   }
 
   if (status === "IN_PROGRESS") {
-    return <Clock3 className="h-5 w-5 shrink-0 text-yellow-600" aria-label="수강중" />;
+    return <PlayCircle className="h-5 w-5 shrink-0" aria-label="수강중" />;
   }
 
-  return <Circle className="h-5 w-5 shrink-0 text-gray-300" aria-label="미수강" />;
+  return <Circle className="h-5 w-5 shrink-0" aria-label="미수강" />;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {

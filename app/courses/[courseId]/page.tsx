@@ -494,7 +494,7 @@ function LectureSections({
             const isCollapsed = collapsedSections[group.section.id] ?? true;
 
             return (
-              <article key={group.section.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+              <article key={group.section.id} className="overflow-visible rounded-2xl border border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-2 px-3 py-2.5">
                   <button
                     type="button"
@@ -597,7 +597,7 @@ function LectureRow({
     <article
       className={`relative flex min-h-[46px] items-center gap-2 border-b px-2.5 py-1.5 last:border-b-0 ${
         isCompleted ? "border-green-100 bg-green-50" : "border-gray-200 bg-gray-50"
-      }`}
+      } ${isMenuOpen ? "z-30" : "z-0"}`}
     >
       {isEditing ? (
         <StatusIcon status={lecture.status} />
@@ -659,7 +659,7 @@ function LectureRow({
               <MoreHorizontal size={17} />
             </IconButton>
             {isMenuOpen ? (
-              <div className="absolute right-2 top-10 z-10 w-28 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+              <div className="absolute right-2 top-9 z-50 w-28 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
                 <button
                   type="button"
                   onClick={() => onEdit(lecture.id)}

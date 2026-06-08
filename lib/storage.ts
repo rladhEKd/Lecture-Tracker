@@ -18,6 +18,17 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function getKoreaDateString() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(new Date());
+}
+
 function createDefaultSection(courseId: string, createdAt: string): Section {
   return {
     id: `${courseId}:default-section`,
@@ -266,7 +277,7 @@ export function updateLectureStatus(
         updatedLecture = {
           ...lecture,
           status,
-          completedAt: status === "COMPLETED" ? new Date().toISOString().slice(0, 10) : null,
+          completedAt: status === "COMPLETED" ? getKoreaDateString() : null,
         };
 
         return updatedLecture;

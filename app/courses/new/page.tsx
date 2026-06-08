@@ -125,7 +125,7 @@ export default function NewCoursePage() {
         </Link>
         <h1 className="mt-4 text-3xl font-bold text-gray-950">새 강의 등록</h1>
         <p className="mt-2 text-sm leading-6 text-gray-500">
-          직접 입력, njobler URL, 캡처 이미지 OCR 중 편한 방식으로 강의 목록을 채운 뒤 수정해서 등록하세요.
+          직접 입력, 지원 사이트 URL, 캡처 이미지 OCR 중 편한 방식으로 강의 목록을 채운 뒤 수정해서 등록하세요.
         </p>
       </header>
 
@@ -145,21 +145,24 @@ export default function NewCoursePage() {
         {inputMode === "url" ? (
           <section className="mt-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
             <label className="block">
-              <span className="text-sm font-bold text-gray-900">njobler 강의 URL</span>
+              <span className="text-sm font-bold text-gray-900">강의 URL</span>
               <input
                 value={importUrl}
                 onChange={(event) => setImportUrl(event.target.value)}
-                placeholder="https://www.njobler.net/product/lecture/show/prod/11293"
+                placeholder="njobler.net 또는 uricpa.com 강의 상세 URL"
                 className="mt-2 min-h-12 w-full rounded-lg border border-blue-200 bg-white px-4 text-base text-gray-950 outline-none transition focus:border-blue-600 focus:ring-4 focus:ring-blue-100"
               />
             </label>
+            <p className="mt-2 text-xs font-bold leading-5 text-blue-700">
+              현재 njobler.net, uricpa.com 강의 상세 페이지를 지원합니다.
+            </p>
             <button
               type="button"
               onClick={handleImport}
               disabled={isImporting}
               className="mt-3 flex min-h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white active:bg-blue-700 disabled:bg-blue-300"
             >
-              {isImporting ? "가져오는 중..." : "커리큘럼 가져오기"}
+              {isImporting ? "가져오는 중..." : "강의목록 가져오기"}
             </button>
           </section>
         ) : null}
@@ -200,7 +203,7 @@ export default function NewCoursePage() {
             value={lectureText}
             onChange={(event) => setLectureText(event.target.value)}
             placeholder={
-              "# 1과목. 소프트웨어 구축\n1. 소프트웨어 공학\n2. 요구사항 분석\n# 2과목. 데이터베이스 구축\n1. 데이터베이스 개념\n2. SQL"
+              "# 강의목차\n1강 OT\n2강 제1장 상속세 및 증여세법 총칙\n# 2과목. 데이터베이스 구축\n1. 데이터베이스 개념\n2. SQL"
             }
             rows={12}
             className="mt-2 w-full resize-y rounded-lg border border-gray-300 bg-white px-4 py-3 text-base leading-7 text-gray-950 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-100"

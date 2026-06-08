@@ -14,6 +14,15 @@ function isSupportedNjoblerUrl(url: URL) {
   );
 }
 
+function isSupportedUricpaUrl(url: URL) {
+  return (
+    (url.hostname === "uricpa.com" || url.hostname === "www.uricpa.com") &&
+    url.pathname.toLowerCase() === "/gcontents/cta/onlecture/eachclass/index.asp" &&
+    url.searchParams.get("BoardMode")?.toLowerCase() === "detail" &&
+    Boolean(url.searchParams.get("Goods_Idx"))
+  );
+}
+
 function decodeHtml(value: string) {
   return value
     .replace(/&nbsp;/g, " ")
@@ -30,7 +39,7 @@ function htmlToLines(html: string) {
     .replace(/<script[\s\S]*?<\/script>/gi, "\n")
     .replace(/<style[\s\S]*?<\/style>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/?(p|div|li|ul|ol|h[1-6]|tr|td|section|article|button|span)[^>]*>/gi, "\n")
+    .replace(/<\/?(p|div|li|ul|ol|h[1-6]|tr|td|th|table|section|article|button|span)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ");
 
   return decodeHtml(text)
@@ -39,30 +48,35 @@ function htmlToLines(html: string) {
     .filter(Boolean);
 }
 
-function getCourseTitle(lines: string[]) {
+function getNjoblerCourseTitle(lines: string[]) {
   return lines.find((line) => line.includes("정보처리") || line.includes("클래스"))?.replace(/^#+\s*/, "");
+}
+
+function getUricpaCourseTitle(lines: string[]) {
+  const titleLine = lines.find((line) => line.includes("강의명 :"));
+  return titleLine?.replace(/^강의명\s*:\s*/, "").trim();
 }
 
 function isDurationLine(line: string) {
   return /^\d+\s*분$/.test(line);
 }
 
-function isNumberedLessonLine(line: string) {
+function isNjoblerNumberedLessonLine(line: string) {
   return /^\d+\.\s+.+/.test(line);
 }
 
-function parseOriginalLessonNumber(line: string) {
+function parseNjoblerOriginalLessonNumber(line: string) {
   return line.match(/^(\d+)\.\s+(.+)/);
 }
 
-function cleanNumberedLessonTitle(line: string) {
+function cleanNjoblerNumberedLessonTitle(line: string) {
   return line
     .replace(/^\d+\.\s+/, "")
     .replace(/\s+\d+\s*분.*$/, "")
     .trim();
 }
 
-function isNoiseLine(line: string) {
+function isNjoblerNoiseLine(line: string) {
   return (
     line.includes("무료보기") ||
     line.includes("전체 커리큘럼") ||
@@ -79,11 +93,16 @@ function isNoiseLine(line: string) {
   );
 }
 
-function isSectionCandidate(line: string) {
-  return Boolean(line) && !isNoiseLine(line) && !isDurationLine(line) && !isNumberedLessonLine(line);
+function isNjoblerSectionCandidate(line: string) {
+  return (
+    Boolean(line) &&
+    !isNjoblerNoiseLine(line) &&
+    !isDurationLine(line) &&
+    !isNjoblerNumberedLessonLine(line)
+  );
 }
 
-function extractCurriculumLines(lines: string[]) {
+function extractNjoblerCurriculumLines(lines: string[]) {
   const startIndex = lines.findLastIndex((line) => line.includes("· 커리큘럼") || line === "커리큘럼");
   if (startIndex < 0) {
     throw new Error("커리큘럼 영역을 찾지 못했습니다.");
@@ -92,12 +111,27 @@ function extractCurriculumLines(lines: string[]) {
   const afterStart = lines.slice(startIndex + 1);
   const endIndex = afterStart.findIndex((line, index) => index > 5 && line.includes("· 크리에이터"));
 
-  return (endIndex >= 0 ? afterStart.slice(0, endIndex) : afterStart).filter((line) => !isNoiseLine(line));
+  return (endIndex >= 0 ? afterStart.slice(0, endIndex) : afterStart).filter((line) => !isNjoblerNoiseLine(line));
 }
 
-function parseCurriculum(html: string): ParsedCurriculum {
+function findNearestNjoblerSectionTitle(lines: string[], lectureTitleIndex: number) {
+  for (let index = lectureTitleIndex - 1; index >= Math.max(0, lectureTitleIndex - 5); index -= 1) {
+    const candidate = lines[index];
+    if (isDurationLine(candidate)) {
+      break;
+    }
+
+    if (isNjoblerSectionCandidate(candidate) && candidate !== lines[lectureTitleIndex]) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function parseNjoblerCurriculum(html: string): ParsedCurriculum {
   const lines = htmlToLines(html);
-  const curriculumLines = extractCurriculumLines(lines);
+  const curriculumLines = extractNjoblerCurriculumLines(lines);
   const output: string[] = [];
   const seenSections = new Set<string>();
   let currentSectionId = "";
@@ -125,13 +159,13 @@ function parseCurriculum(html: string): ParsedCurriculum {
   }
 
   curriculumLines.forEach((line, index) => {
-    const numberedMatch = parseOriginalLessonNumber(line);
+    const numberedMatch = parseNjoblerOriginalLessonNumber(line);
     if (numberedMatch) {
-      const sectionTitle = findNearestSectionTitle(curriculumLines, index);
+      const sectionTitle = findNearestNjoblerSectionTitle(curriculumLines, index);
       if (sectionTitle && sectionTitle !== currentSectionId) {
         startSection(sectionTitle);
       }
-      pushLecture(cleanNumberedLessonTitle(line), numberedMatch[1]);
+      pushLecture(cleanNjoblerNumberedLessonTitle(line), numberedMatch[1]);
       return;
     }
 
@@ -140,11 +174,11 @@ function parseCurriculum(html: string): ParsedCurriculum {
     }
 
     const lectureTitle = curriculumLines[index - 1];
-    if (!lectureTitle || !isSectionCandidate(lectureTitle)) {
+    if (!lectureTitle || !isNjoblerSectionCandidate(lectureTitle)) {
       return;
     }
 
-    const sectionTitle = findNearestSectionTitle(curriculumLines, index - 1);
+    const sectionTitle = findNearestNjoblerSectionTitle(curriculumLines, index - 1);
     if (sectionTitle && sectionTitle !== currentSectionId) {
       startSection(sectionTitle);
     }
@@ -157,26 +191,106 @@ function parseCurriculum(html: string): ParsedCurriculum {
   }
 
   return {
-    title: getCourseTitle(lines),
+    title: getNjoblerCourseTitle(lines),
     text: output.join("\n"),
     sectionCount,
     lectureCount,
   };
 }
 
-function findNearestSectionTitle(lines: string[], lectureTitleIndex: number) {
-  for (let index = lectureTitleIndex - 1; index >= Math.max(0, lectureTitleIndex - 5); index -= 1) {
-    const candidate = lines[index];
-    if (isDurationLine(candidate)) {
-      break;
-    }
+function cleanUricpaLessonTitle(title: string) {
+  return title
+    .replace(/※자료 다운로드 시 환불이 불가한 점 참고바랍니다\./g, "")
+    .replace(/\s+\d+\s*분.*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-    if (isSectionCandidate(candidate) && candidate !== lines[lectureTitleIndex]) {
-      return candidate;
-    }
+function parseUricpaLessonLine(line: string) {
+  const match = line.match(/^(\d+)강\s+(.+?)(?:\s+\d+\s*분(?:\s+.*)?$|$)/);
+  if (!match) {
+    return null;
   }
 
-  return undefined;
+  return {
+    number: match[1],
+    title: cleanUricpaLessonTitle(match[2]),
+    hasDuration: /\d+\s*분/.test(line),
+  };
+}
+
+function parseUricpaCurriculum(html: string): ParsedCurriculum {
+  const lines = htmlToLines(html);
+  const startIndex = lines.findLastIndex((line) => line === "강의목차");
+  if (startIndex < 0) {
+    throw new Error("강의목차 영역을 찾지 못했습니다.");
+  }
+
+  const afterStart = lines.slice(startIndex + 1);
+  const endIndex = afterStart.findIndex((line) => line === "교재정보" || line.startsWith("교재명 :"));
+  const curriculumLines = endIndex >= 0 ? afterStart.slice(0, endIndex) : afterStart;
+  const output = ["# 강의목차"];
+  let lectureCount = 0;
+  let pendingLesson: { number: string; title: string } | null = null;
+  let pendingNumber: string | null = null;
+
+  function flushPendingLesson() {
+    if (!pendingLesson) {
+      return;
+    }
+
+    lectureCount += 1;
+    output.push(`${pendingLesson.number}강 ${pendingLesson.title}`);
+    pendingLesson = null;
+  }
+
+  curriculumLines.forEach((line) => {
+    const numberOnlyMatch = line.match(/^(\d+)강$/);
+    if (numberOnlyMatch) {
+      flushPendingLesson();
+      pendingNumber = numberOnlyMatch[1];
+      return;
+    }
+
+    const lesson = parseUricpaLessonLine(line);
+    if (lesson) {
+      flushPendingLesson();
+
+      if (lesson.hasDuration) {
+        lectureCount += 1;
+        output.push(`${lesson.number}강 ${lesson.title}`);
+      } else {
+        pendingLesson = { number: lesson.number, title: lesson.title };
+      }
+      return;
+    }
+
+    if (pendingNumber && !isDurationLine(line) && line !== "시간" && line !== "자료") {
+      pendingLesson = {
+        number: pendingNumber,
+        title: cleanUricpaLessonTitle(line),
+      };
+      pendingNumber = null;
+      return;
+    }
+
+    if (pendingLesson && isDurationLine(line)) {
+      flushPendingLesson();
+    }
+  });
+
+  flushPendingLesson();
+
+  if (lectureCount === 0) {
+    throw new Error("가져올 수 있는 강의목차를 찾지 못했습니다.");
+  }
+
+  return {
+    title: getUricpaCourseTitle(lines),
+    text: output.join("\n"),
+    sectionCount: 1,
+    lectureCount,
+  };
 }
 
 async function readHtml(response: Response) {
@@ -189,7 +303,7 @@ async function readHtml(response: Response) {
   }
 
   const utf8 = new TextDecoder("utf-8").decode(bytes);
-  if (!utf8.includes("커리큘럼") && /[ìëí][\u0080-\u00ff]/.test(utf8)) {
+  if (!utf8.includes("커리큘럼") && !utf8.includes("강의목차") && /[ìëí][\u0080-\u00ff]/.test(utf8)) {
     return new TextDecoder("euc-kr").decode(bytes);
   }
 
@@ -210,9 +324,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "올바른 URL 형식이 아닙니다." }, { status: 400 });
     }
 
-    if (!isSupportedNjoblerUrl(targetUrl)) {
+    const provider = isSupportedNjoblerUrl(targetUrl)
+      ? "njobler"
+      : isSupportedUricpaUrl(targetUrl)
+        ? "uricpa"
+        : null;
+
+    if (!provider) {
       return NextResponse.json(
-        { error: "현재는 njobler.net/product/lecture/show/prod/ 형식의 강의 페이지 URL만 지원합니다." },
+        { error: "현재는 njobler.net 강의 페이지와 uricpa.com 강의 상세 페이지만 지원합니다." },
         { status: 400 },
       );
     }
@@ -232,7 +352,7 @@ export async function POST(request: NextRequest) {
     }
 
     const html = await readHtml(response);
-    const parsed = parseCurriculum(html);
+    const parsed = provider === "njobler" ? parseNjoblerCurriculum(html) : parseUricpaCurriculum(html);
 
     return NextResponse.json(parsed);
   } catch (error) {

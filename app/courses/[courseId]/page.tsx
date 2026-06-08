@@ -770,7 +770,7 @@ function SectionPlanModal({
           <h2 className="text-lg font-bold text-gray-950">계획 수정</h2>
           <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.sectionTitle}</p>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           <div className="space-y-2.5">
             <label className="block">
               <span className="text-sm font-bold text-gray-800">시작 날짜</span>
@@ -782,7 +782,7 @@ function SectionPlanModal({
                     current ? { ...current, planStartDate: event.target.value } : current,
                   )
                 }
-                className="mt-1 min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
             </label>
             <label className="block">
@@ -795,7 +795,7 @@ function SectionPlanModal({
                     current ? { ...current, planEndDate: event.target.value } : current,
                   )
                 }
-                className="mt-1 min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
             </label>
             <label className="block">
@@ -810,7 +810,7 @@ function SectionPlanModal({
                     current ? { ...current, dailyTargetCount: event.target.value } : current,
                   )
                 }
-                className="mt-1 min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
               />
             </label>
           </div>

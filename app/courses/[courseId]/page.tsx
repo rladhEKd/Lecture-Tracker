@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteLecture,
   getCourse,
@@ -26,19 +26,23 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
 ];
 
 const statusStyle: Record<LectureStatus, string> = {
-  NOT_STARTED: "border-gray-200 bg-gray-100 text-gray-700",
-  IN_PROGRESS: "border-yellow-200 bg-yellow-100 text-yellow-800",
-  COMPLETED: "border-green-200 bg-green-100 text-green-700",
+  NOT_STARTED: "border-gray-200 bg-white text-gray-600",
+  IN_PROGRESS: "border-yellow-200 bg-yellow-50 text-yellow-800",
+  COMPLETED: "border-green-200 bg-green-50 text-green-700",
 };
 
 export default function CourseDetailPage() {
   const params = useParams<{ courseId: string }>();
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [course, setCourse] = useState<CourseWithLectures | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [hideCompleted, setHideCompleted] = useState(false);
   const [courseTitleDraft, setCourseTitleDraft] = useState("");
   const [lectureTitleDrafts, setLectureTitleDrafts] = useState<Record<string, string>>({});
+  const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
+  const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
     const nextCourse = getCourse(params.courseId);
@@ -48,6 +52,14 @@ export default function CourseDetailPage() {
       Object.fromEntries((nextCourse?.lectures ?? []).map((lecture) => [lecture.id, lecture.title])),
     );
   }, [params.courseId]);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const totalCount = course?.lectures.length ?? 0;
@@ -69,15 +81,31 @@ export default function CourseDetailPage() {
     });
   }, [course, hideCompleted, searchTerm, statusFilter]);
 
+  function showFeedback(message: string) {
+    setFeedback(message);
+    if (feedbackTimer.current) {
+      clearTimeout(feedbackTimer.current);
+    }
+    feedbackTimer.current = setTimeout(() => setFeedback(""), 1400);
+  }
+
   function handleCourseTitleSave() {
     const updatedCourse = updateCourseTitle(params.courseId, courseTitleDraft);
     if (!updatedCourse) {
       setCourseTitleDraft(course?.title ?? "");
+      setIsEditingCourseTitle(false);
       return;
     }
 
     setCourse(updatedCourse);
     setCourseTitleDraft(updatedCourse.title);
+    setIsEditingCourseTitle(false);
+    showFeedback("저장되었습니다");
+  }
+
+  function handleCourseTitleCancel() {
+    setCourseTitleDraft(course?.title ?? "");
+    setIsEditingCourseTitle(false);
   }
 
   function handleLectureTitleSave(lectureId: string) {
@@ -87,6 +115,7 @@ export default function CourseDetailPage() {
         ...current,
         [lectureId]: course?.lectures.find((lecture) => lecture.id === lectureId)?.title ?? "",
       }));
+      setEditingLectureId(null);
       return;
     }
 
@@ -103,6 +132,16 @@ export default function CourseDetailPage() {
       };
     });
     setLectureTitleDrafts((current) => ({ ...current, [lectureId]: updatedLecture.title }));
+    setEditingLectureId(null);
+    showFeedback("저장되었습니다");
+  }
+
+  function handleLectureTitleCancel(lectureId: string) {
+    setLectureTitleDrafts((current) => ({
+      ...current,
+      [lectureId]: course?.lectures.find((lecture) => lecture.id === lectureId)?.title ?? "",
+    }));
+    setEditingLectureId(null);
   }
 
   function handleLectureDelete(lectureId: string, title: string) {
@@ -118,6 +157,7 @@ export default function CourseDetailPage() {
       delete next[lectureId];
       return next;
     });
+    showFeedback("삭제되었습니다");
   }
 
   function handleStatusChange(lectureId: string, status: LectureStatus) {
@@ -138,6 +178,7 @@ export default function CourseDetailPage() {
         ),
       };
     });
+    showFeedback("상태가 변경되었습니다");
   }
 
   if (!course) {
@@ -146,7 +187,7 @@ export default function CourseDetailPage() {
         <Link href="/" className="text-sm font-bold text-gray-600 active:text-gray-950">
           돌아가기
         </Link>
-        <div className="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
+        <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
           <p className="text-base font-bold text-gray-900">강의를 찾을 수 없습니다</p>
           <p className="mt-2 text-sm leading-6 text-gray-500">홈으로 돌아가 등록된 강의 목록을 확인하세요.</p>
         </div>
@@ -156,28 +197,48 @@ export default function CourseDetailPage() {
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-screen-sm bg-white px-5 pb-10 pt-[max(24px,env(safe-area-inset-top))]">
+      {feedback ? (
+        <div className="fixed left-1/2 top-[max(14px,env(safe-area-inset-top))] z-10 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-lg">
+          {feedback}
+        </div>
+      ) : null}
+
       <header className="mb-6">
         <Link href="/" className="text-sm font-bold text-gray-600 active:text-gray-950">
           돌아가기
         </Link>
-        <label className="mt-4 block">
-          <span className="text-sm font-bold text-gray-600">강의명</span>
-          <div className="mt-2 flex gap-2">
-            <input
-              value={courseTitleDraft}
-              onChange={(event) => setCourseTitleDraft(event.target.value)}
-              onBlur={handleCourseTitleSave}
-              className="min-h-12 min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-4 text-xl font-bold text-gray-950 outline-none focus:border-gray-950 focus:ring-4 focus:ring-gray-100"
-            />
-            <button
-              type="button"
-              onClick={handleCourseTitleSave}
-              className="min-h-12 rounded-lg bg-gray-950 px-4 text-sm font-bold text-white active:bg-gray-800"
-            >
-              저장
-            </button>
+        <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-start gap-3">
+            {isEditingCourseTitle ? (
+              <input
+                value={courseTitleDraft}
+                onChange={(event) => setCourseTitleDraft(event.target.value)}
+                className="min-h-12 min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-4 text-xl font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                aria-label="강의명"
+              />
+            ) : (
+              <h1 className="min-w-0 flex-1 break-words text-2xl font-bold leading-tight text-gray-950">
+                {course.title}
+              </h1>
+            )}
+            <div className="flex shrink-0 gap-2">
+              {isEditingCourseTitle ? (
+                <>
+                  <IconButton label="강의명 저장" tone="primary" onClick={handleCourseTitleSave}>
+                    <CheckIcon />
+                  </IconButton>
+                  <IconButton label="강의명 수정 취소" tone="neutral" onClick={handleCourseTitleCancel}>
+                    <XIcon />
+                  </IconButton>
+                </>
+              ) : (
+                <IconButton label="강의명 수정" tone="neutral" onClick={() => setIsEditingCourseTitle(true)}>
+                  <PencilIcon />
+                </IconButton>
+              )}
+            </div>
           </div>
-        </label>
+        </div>
       </header>
 
       <section className="grid grid-cols-3 gap-3">
@@ -186,24 +247,24 @@ export default function CourseDetailPage() {
         <StatCard label="진도율" value={`${stats.progressRate}%`} />
       </section>
 
-      <section className="mt-5 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <section className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4">
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm font-bold text-gray-700">전체 진도</p>
-          <p className="text-sm font-bold text-green-700">{stats.progressRate}%</p>
+          <p className="text-sm font-bold text-blue-700">{stats.progressRate}%</p>
         </div>
-        <div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-100">
-          <div className="h-full rounded-full bg-green-500" style={{ width: `${stats.progressRate}%` }} />
+        <div className="mt-3 h-3 overflow-hidden rounded-full bg-gray-200">
+          <div className="h-full rounded-full bg-blue-500" style={{ width: `${stats.progressRate}%` }} />
         </div>
       </section>
 
-      <section className="mt-5 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <section className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4">
         <label className="block">
           <span className="text-sm font-bold text-gray-900">강의명 검색</span>
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="예: 법인세, OT"
-            className="mt-2 min-h-12 w-full rounded-lg border border-gray-300 bg-white px-4 text-base text-gray-950 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-100"
+            className="mt-2 min-h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-base text-gray-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </label>
 
@@ -218,10 +279,10 @@ export default function CourseDetailPage() {
                   key={option.value}
                   type="button"
                   onClick={() => setStatusFilter(option.value)}
-                  className={`min-h-10 rounded-lg border px-2 text-sm font-bold ${
+                  className={`min-h-10 rounded-full border px-2 text-sm font-bold ${
                     isActive
-                      ? "border-gray-950 bg-gray-950 text-white"
-                      : "border-gray-200 bg-white text-gray-700 active:bg-gray-50"
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
                   }`}
                 >
                   {option.label}
@@ -231,100 +292,117 @@ export default function CourseDetailPage() {
           </div>
         </div>
 
-        <label className="mt-4 flex min-h-12 items-center justify-between gap-4 rounded-lg bg-gray-50 px-4">
+        <label className="mt-4 flex min-h-12 items-center justify-between gap-4 rounded-xl bg-white px-4">
           <span className="text-sm font-bold text-gray-800">완료 강의 숨기기</span>
           <input
             type="checkbox"
             checked={hideCompleted}
             onChange={(event) => setHideCompleted(event.target.checked)}
-            className="h-5 w-5 accent-gray-950"
+            className="h-5 w-5 accent-blue-600"
           />
         </label>
       </section>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[1fr_96px] border-b border-gray-200 bg-gray-50 px-3 py-3 text-xs font-bold text-gray-600">
-          <span>강의명</span>
-          <span>상태</span>
+      <section className="mt-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-950">강의 목록</h2>
+          <span className="text-sm font-bold text-gray-500">{filteredLectures.length}개</span>
         </div>
 
-        <div>
-          {filteredLectures.length === 0 ? (
-            <div className="px-5 py-8 text-center">
-              <p className="text-base font-bold text-gray-900">조건에 맞는 강의가 없습니다</p>
-              <p className="mt-2 text-sm leading-6 text-gray-500">검색어를 줄이거나 상태 필터를 변경하세요.</p>
-            </div>
-          ) : (
-            filteredLectures.map((lecture) => {
+        {filteredLectures.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
+            <p className="text-base font-bold text-gray-900">조건에 맞는 강의가 없습니다</p>
+            <p className="mt-2 text-sm leading-6 text-gray-500">검색어를 줄이거나 상태 필터를 변경하세요.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredLectures.map((lecture) => {
               const isCompleted = lecture.status === "COMPLETED";
+              const isEditing = editingLectureId === lecture.id;
 
               return (
-                <div
+                <article
                   key={lecture.id}
-                  className={`border-b px-3 py-3 last:border-b-0 ${
-                    isCompleted ? "border-green-100 bg-green-50/70" : "border-gray-100 bg-white"
+                  className={`rounded-2xl border p-4 ${
+                    isCompleted ? "border-green-100 bg-green-50" : "border-gray-200 bg-gray-50"
                   }`}
                 >
-                  <div className="grid grid-cols-[1fr_96px] items-start gap-2">
-                    <div className="min-w-0">
-                      <input
-                        value={lectureTitleDrafts[lecture.id] ?? lecture.title}
-                        onChange={(event) =>
-                          setLectureTitleDrafts((current) => ({
-                            ...current,
-                            [lecture.id]: event.target.value,
-                          }))
-                        }
-                        onBlur={() => handleLectureTitleSave(lecture.id)}
-                        className={`min-h-10 w-full rounded-lg border px-3 text-sm font-bold outline-none focus:border-gray-950 focus:ring-4 focus:ring-gray-100 ${
-                          isCompleted
-                            ? "border-green-200 bg-white text-green-800"
-                            : "border-gray-200 bg-white text-gray-950"
-                        }`}
-                        aria-label={`${lecture.title} 제목`}
-                      />
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-500">{lecture.completedAt ?? "-"}</span>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleLectureTitleSave(lecture.id)}
-                            className="min-h-8 rounded-lg border border-gray-200 bg-white px-3 text-xs font-bold text-gray-700 active:bg-gray-50"
-                          >
-                            저장
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleLectureDelete(lecture.id, lecture.title)}
-                            className="min-h-8 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-700 active:bg-red-100"
-                          >
-                            삭제
-                          </button>
-                        </div>
-                      </div>
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      {isEditing ? (
+                        <input
+                          value={lectureTitleDrafts[lecture.id] ?? lecture.title}
+                          onChange={(event) =>
+                            setLectureTitleDrafts((current) => ({
+                              ...current,
+                              [lecture.id]: event.target.value,
+                            }))
+                          }
+                          className="min-h-11 w-full rounded-xl border border-blue-200 bg-white px-3 text-base font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                          aria-label={`${lecture.title} 제목`}
+                        />
+                      ) : (
+                        <h3
+                          className={`break-words text-base font-bold leading-6 ${
+                            isCompleted ? "text-green-800" : "text-gray-950"
+                          }`}
+                        >
+                          {lecture.title}
+                        </h3>
+                      )}
+                      <p className="mt-1 text-xs font-bold text-gray-500">완료일 {lecture.completedAt ?? "-"}</p>
                     </div>
-                    <div className={`relative rounded-lg border px-2 py-1 ${statusStyle[lecture.status]}`}>
-                      <select
-                        value={lecture.status}
-                        onChange={(event) => handleStatusChange(lecture.id, event.target.value as LectureStatus)}
-                        className="w-full appearance-none bg-transparent pr-4 text-sm font-bold outline-none"
-                        aria-label={`${lecture.title} 상태`}
-                      >
-                        {statusOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs">v</span>
+
+                    <div className="flex shrink-0 gap-2">
+                      {isEditing ? (
+                        <>
+                          <IconButton label="강의 제목 저장" tone="primary" onClick={() => handleLectureTitleSave(lecture.id)}>
+                            <CheckIcon />
+                          </IconButton>
+                          <IconButton label="강의 제목 수정 취소" tone="neutral" onClick={() => handleLectureTitleCancel(lecture.id)}>
+                            <XIcon />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <>
+                          <IconButton label="강의 제목 수정" tone="neutral" onClick={() => setEditingLectureId(lecture.id)}>
+                            <PencilIcon />
+                          </IconButton>
+                          <IconButton label="강의 삭제" tone="danger" onClick={() => handleLectureDelete(lecture.id, lecture.title)}>
+                            <TrashIcon />
+                          </IconButton>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {isCompleted ? <p className="mt-2 text-xs font-bold text-green-600">완료됨</p> : null}
-                </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    {statusOptions.map((option) => {
+                      const isActive = lecture.status === option.value;
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleStatusChange(lecture.id, option.value)}
+                          className={`min-h-10 rounded-full border px-2 text-sm font-bold ${
+                            isActive
+                              ? statusStyle[option.value]
+                              : "border-gray-200 bg-white text-gray-500 active:bg-gray-100"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {isCompleted ? <p className="mt-3 text-xs font-bold text-green-700">완료됨</p> : null}
+                </article>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
@@ -332,9 +410,73 @@ export default function CourseDetailPage() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
       <p className="min-h-8 text-xs font-bold leading-4 text-gray-500">{label}</p>
       <p className="mt-2 text-2xl font-bold text-gray-950">{value}</p>
     </div>
+  );
+}
+
+function IconButton({
+  children,
+  label,
+  onClick,
+  tone,
+}: {
+  children: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  tone: "danger" | "neutral" | "primary";
+}) {
+  const toneClass = {
+    danger: "border-red-100 bg-white text-red-600 active:bg-red-50",
+    neutral: "border-gray-200 bg-white text-gray-700 active:bg-gray-100",
+    primary: "border-blue-600 bg-blue-600 text-white active:bg-blue-700",
+  }[tone];
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-11 w-11 items-center justify-center rounded-full border ${toneClass}`}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.9 4.7l2.4 2.4M4 20h4.8L19.6 9.2a1.7 1.7 0 0 0 0-2.4l-2.4-2.4a1.7 1.7 0 0 0-2.4 0L4 15.2V20z" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10 11v6M14 11v6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 7l1 14h10l1-14" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 7V4h6v3" />
+    </svg>
   );
 }

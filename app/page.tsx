@@ -14,6 +14,72 @@ function getProgress(course: CourseWithLectures) {
   return Math.round((completedCount / course.lectures.length) * 100);
 }
 
+function getKoreaTodayDateString() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function getDateDiffDays(fromDate: string, toDate: string) {
+  const from = Date.UTC(
+    Number(fromDate.slice(0, 4)),
+    Number(fromDate.slice(5, 7)) - 1,
+    Number(fromDate.slice(8, 10)),
+  );
+  const to = Date.UTC(
+    Number(toDate.slice(0, 4)),
+    Number(toDate.slice(5, 7)) - 1,
+    Number(toDate.slice(8, 10)),
+  );
+
+  return Math.floor((to - from) / 86400000);
+}
+
+function getSectionPlanSummaries(course: CourseWithLectures) {
+  const today = getKoreaTodayDateString();
+  const summaries = course.sections
+    .map((section) => {
+      if (!section.planStartDate || !section.planEndDate || !section.dailyTargetCount) {
+        return null;
+      }
+
+      const sectionLectures = course.lectures.filter((lecture) => lecture.sectionId === section.id);
+      const totalCount = sectionLectures.length;
+      const completedCount = sectionLectures.filter((lecture) => lecture.status === "COMPLETED").length;
+      const elapsedDays =
+        today < section.planStartDate
+          ? 0
+          : today > section.planEndDate
+            ? totalCount
+            : getDateDiffDays(section.planStartDate, today) + 1;
+      const requiredCount =
+        today > section.planEndDate
+          ? totalCount
+          : Math.min(totalCount, Math.max(0, elapsedDays) * section.dailyTargetCount);
+      const overdueCount = Math.max(0, requiredCount - completedCount);
+
+      return {
+        sectionTitle: section.title,
+        overdueCount,
+      };
+    })
+    .filter((summary): summary is { sectionTitle: string; overdueCount: number } => summary !== null);
+
+  const overdueSummaries = summaries.filter((summary) => summary.overdueCount > 0);
+  if (overdueSummaries.length > 0) {
+    return overdueSummaries.slice(0, 2).map((summary, index) => {
+      const extraCount = overdueSummaries.length - 2;
+      const suffix = index === 1 && extraCount > 0 ? ` 외 ${extraCount}개` : "";
+      return `${summary.sectionTitle} ${summary.overdueCount}강 밀림${suffix}`;
+    });
+  }
+
+  return summaries.slice(0, 2).map((summary) => `${summary.sectionTitle} 계획대로 진행 중`);
+}
+
 function getBackupFileName() {
   return `lecture-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
 }
@@ -116,36 +182,27 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-bold text-gray-500">새 강의 등록</p>
-            <h2 className="mt-2 text-xl font-bold leading-7 text-gray-950">
-              강의 목록을 입력하고 수강 현황을 관리하세요
-            </h2>
-          </div>
-          <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">MVP</span>
-        </div>
-        <Link
-          href="/courses/new"
-          className="mt-5 flex min-h-14 w-full items-center justify-center rounded-2xl bg-blue-600 px-5 text-base font-bold text-white shadow-sm active:bg-blue-700"
-        >
-          + 강의 추가
-        </Link>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json,.json"
-          onChange={handleRestore}
-          className="hidden"
-        />
-        {message ? <p className="mt-3 text-sm font-bold text-gray-600">{message}</p> : null}
-      </section>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={handleRestore}
+        className="hidden"
+      />
+      {message ? <p className="rounded-2xl bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">{message}</p> : null}
 
-      <section className="mt-6 flex-1">
-        <div className="mb-3 flex items-end justify-between">
+      <section className="mt-4 flex-1">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-gray-950">내 강의</h2>
-          <span className="text-sm font-medium text-gray-500">{courses.length}개 과정</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-500">{courses.length}개 과정</span>
+            <Link
+              href="/courses/new"
+              className="flex min-h-9 items-center rounded-full bg-blue-600 px-3 text-sm font-bold text-white active:bg-blue-700"
+            >
+              + 강의 추가
+            </Link>
+          </div>
         </div>
 
         {courses.length === 0 ? (
@@ -159,6 +216,7 @@ export default function Home() {
           <div className="space-y-3">
             {courses.map((course) => {
               const progress = getProgress(course);
+              const planSummaries = getSectionPlanSummaries(course);
 
               return (
                 <article key={course.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -176,6 +234,15 @@ export default function Home() {
                       <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200">
                         <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
                       </div>
+                      {planSummaries.length > 0 ? (
+                        <div className="mt-3 space-y-1">
+                          {planSummaries.map((summary) => (
+                            <p key={summary} className="truncate text-xs font-bold text-gray-600">
+                              {summary}
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
                     </Link>
                     <button
                       type="button"

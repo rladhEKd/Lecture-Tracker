@@ -22,6 +22,7 @@ import {
   updateCourseTitle,
   updateLectureStatus,
   updateLectureTitle,
+  updateSectionPlan,
 } from "@/lib/storage";
 import type { CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/types";
 
@@ -42,6 +43,13 @@ type SectionConfirm = {
   group: SectionGroup;
   nextStatus: LectureStatus;
   message: string;
+} | null;
+type SectionPlanDraft = {
+  sectionId: string;
+  sectionTitle: string;
+  planStartDate: string;
+  planEndDate: string;
+  dailyTargetCount: string;
 } | null;
 
 const statusOptions: { value: LectureStatus; label: string }[] = [
@@ -69,6 +77,7 @@ export default function CourseDetailPage() {
   const [openLectureMenuId, setOpenLectureMenuId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
+  const [sectionPlanDraft, setSectionPlanDraft] = useState<SectionPlanDraft>(null);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -293,6 +302,48 @@ export default function CourseDetailPage() {
     showFeedback("섹션 상태가 변경되었습니다");
   }
 
+  function openSectionPlan(section: Section) {
+    setSectionPlanDraft({
+      sectionId: section.id,
+      sectionTitle: section.title,
+      planStartDate: section.planStartDate ?? "",
+      planEndDate: section.planEndDate ?? "",
+      dailyTargetCount: section.dailyTargetCount ? String(section.dailyTargetCount) : "",
+    });
+  }
+
+  function saveSectionPlan() {
+    if (!sectionPlanDraft) {
+      return;
+    }
+
+    const updatedSection = updateSectionPlan(params.courseId, sectionPlanDraft.sectionId, {
+      planStartDate: sectionPlanDraft.planStartDate,
+      planEndDate: sectionPlanDraft.planEndDate,
+      dailyTargetCount: Number(sectionPlanDraft.dailyTargetCount),
+    });
+
+    if (!updatedSection) {
+      setSectionPlanDraft(null);
+      return;
+    }
+
+    setCourse((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sections: current.sections.map((section) =>
+          section.id === updatedSection.id ? updatedSection : section,
+        ),
+      };
+    });
+    setSectionPlanDraft(null);
+    showFeedback("계획이 저장되었습니다");
+  }
+
   function toggleSection(sectionId: string) {
     setCollapsedSections((current) => ({ ...current, [sectionId]: !current[sectionId] }));
   }
@@ -427,6 +478,7 @@ export default function CourseDetailPage() {
         onDelete={handleLectureDelete}
         onEdit={handleLectureEditStart}
         onLectureMenuToggle={handleLectureMenuToggle}
+        onPlanEdit={openSectionPlan}
         onSaveTitle={handleLectureTitleSave}
         onSectionAction={openSectionConfirm}
         onStatusToggle={handleLectureToggle}
@@ -438,6 +490,12 @@ export default function CourseDetailPage() {
         confirm={sectionConfirm}
         onCancel={() => setSectionConfirm(null)}
         onConfirm={applySectionConfirm}
+      />
+      <SectionPlanModal
+        draft={sectionPlanDraft}
+        onCancel={() => setSectionPlanDraft(null)}
+        onChange={setSectionPlanDraft}
+        onSave={saveSectionPlan}
       />
     </main>
   );
@@ -454,6 +512,7 @@ function LectureSections({
   onDelete,
   onEdit,
   onLectureMenuToggle,
+  onPlanEdit,
   onSaveTitle,
   onSectionAction,
   onStatusToggle,
@@ -470,6 +529,7 @@ function LectureSections({
   onDelete: (lectureId: string, title: string) => void;
   onEdit: (lectureId: string) => void;
   onLectureMenuToggle: (lectureId: string) => void;
+  onPlanEdit: (section: Section) => void;
   onSaveTitle: (lectureId: string) => void;
   onSectionAction: (group: SectionGroup, action: SectionAction) => void;
   onStatusToggle: (lecture: Lecture) => void;
@@ -534,6 +594,9 @@ function LectureSections({
                     onClick={() => onSectionAction(group, "COMPLETE")}
                   >
                     <CheckCircle2 size={17} />
+                  </IconButton>
+                  <IconButton label="섹션 계획 수정" tone="neutral" onClick={() => onPlanEdit(group.section)}>
+                    <Pencil size={16} />
                   </IconButton>
                 </div>
 
@@ -682,6 +745,90 @@ function LectureRow({
         )}
       </div>
     </article>
+  );
+}
+
+function SectionPlanModal({
+  draft,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  draft: SectionPlanDraft;
+  onCancel: () => void;
+  onChange: Dispatch<SetStateAction<SectionPlanDraft>>;
+  onSave: () => void;
+}) {
+  if (!draft) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-4 pb-6 pt-20">
+      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-bold text-gray-950">계획 수정</h2>
+        <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.sectionTitle}</p>
+        <div className="mt-4 space-y-3">
+          <label className="block">
+            <span className="text-sm font-bold text-gray-800">시작 날짜</span>
+            <input
+              type="date"
+              value={draft.planStartDate}
+              onChange={(event) =>
+                onChange((current) =>
+                  current ? { ...current, planStartDate: event.target.value } : current,
+                )
+              }
+              className="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-bold text-gray-800">종료 날짜</span>
+            <input
+              type="date"
+              value={draft.planEndDate}
+              onChange={(event) =>
+                onChange((current) =>
+                  current ? { ...current, planEndDate: event.target.value } : current,
+                )
+              }
+              className="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-bold text-gray-800">하루 목표 강의 수</span>
+            <input
+              type="number"
+              min="1"
+              inputMode="numeric"
+              value={draft.dailyTargetCount}
+              onChange={(event) =>
+                onChange((current) =>
+                  current ? { ...current, dailyTargetCount: event.target.value } : current,
+                )
+              }
+              className="mt-1 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            />
+          </label>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-12 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            className="min-h-12 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

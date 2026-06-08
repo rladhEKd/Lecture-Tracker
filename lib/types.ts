@@ -12,6 +12,9 @@ export type Section = {
   title: string;
   order: number;
   createdAt: string;
+  planStartDate?: string;
+  planEndDate?: string;
+  dailyTargetCount?: number;
 };
 
 export type Lecture = {

@@ -70,6 +70,12 @@ function normalizeCourse(course: StoredCourse): CourseWithLectures {
           ...section,
           courseId: course.id,
           order: typeof section.order === "number" ? section.order : index,
+          planStartDate: typeof section.planStartDate === "string" ? section.planStartDate : undefined,
+          planEndDate: typeof section.planEndDate === "string" ? section.planEndDate : undefined,
+          dailyTargetCount:
+            typeof section.dailyTargetCount === "number" && section.dailyTargetCount > 0
+              ? section.dailyTargetCount
+              : undefined,
         }))
       : [defaultSection];
 
@@ -234,6 +240,52 @@ export function updateCourseTitle(courseId: string, title: string): CourseWithLe
 
   writeCourses(nextCourses);
   return updatedCourse;
+}
+
+export function updateSectionPlan(
+  courseId: string,
+  sectionId: string,
+  plan: {
+    planStartDate?: string;
+    planEndDate?: string;
+    dailyTargetCount?: number;
+  },
+): Section | null {
+  const courses = readCourses();
+  let updatedSection: Section | null = null;
+  const nextPlan = {
+    planStartDate: plan.planStartDate?.trim() || undefined,
+    planEndDate: plan.planEndDate?.trim() || undefined,
+    dailyTargetCount:
+      typeof plan.dailyTargetCount === "number" && Number.isFinite(plan.dailyTargetCount) && plan.dailyTargetCount > 0
+        ? Math.floor(plan.dailyTargetCount)
+        : undefined,
+  };
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    return {
+      ...course,
+      sections: course.sections.map((section) => {
+        if (section.id !== sectionId) {
+          return section;
+        }
+
+        updatedSection = {
+          ...section,
+          ...nextPlan,
+        };
+
+        return updatedSection;
+      }),
+    };
+  });
+
+  writeCourses(nextCourses);
+  return updatedSection;
 }
 
 export function createCourse(title: string, lines: string[]): Course {

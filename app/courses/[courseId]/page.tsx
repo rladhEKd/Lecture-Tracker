@@ -85,6 +85,7 @@ export default function CourseDetailPage() {
   const [courseTitleDraft, setCourseTitleDraft] = useState("");
   const [lectureTitleDrafts, setLectureTitleDrafts] = useState<Record<string, string>>({});
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
+  const [isCourseMenuOpen, setIsCourseMenuOpen] = useState(false);
   const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
   const [openLectureMenuId, setOpenLectureMenuId] = useState<string | null>(null);
   const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
@@ -198,6 +199,7 @@ export default function CourseDetailPage() {
   }
 
   function openRoundEdit() {
+    setIsCourseMenuOpen(false);
     setRoundDraft(String(course?.currentRound ?? 1));
   }
 
@@ -497,7 +499,7 @@ export default function CourseDetailPage() {
               {course.title}
             </h1>
           )}
-          <div className="flex shrink-0 gap-1">
+          <div className="relative flex shrink-0 gap-1">
             {isEditingCourseTitle ? (
               <>
                 <IconButton label="강의명 저장" tone="primary" onClick={handleCourseTitleSave}>
@@ -512,26 +514,37 @@ export default function CourseDetailPage() {
                 <Pencil size={17} />
               </IconButton>
             )}
+            {!isEditingCourseTitle ? (
+              <>
+                <IconButton label="강의 메뉴 열기" tone="neutral" onClick={() => setIsCourseMenuOpen((current) => !current)}>
+                  <MoreHorizontal size={17} />
+                </IconButton>
+                {isCourseMenuOpen ? (
+                  <div className="absolute right-0 top-10 z-50 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={openRoundEdit}
+                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+                    >
+                      회독 수정
+                    </button>
+                    {isCurrentRoundCompleted ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCourseMenuOpen(false);
+                          setIsRoundConfirmOpen(true);
+                        }}
+                        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold text-green-700 active:bg-green-50"
+                      >
+                        다음 회독 시작
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
           </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={openRoundEdit}
-            className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700 active:bg-blue-100"
-          >
-            현재 {course.currentRound ?? 1}회독
-          </button>
-          {isCurrentRoundCompleted ? (
-            <button
-              type="button"
-              onClick={() => setIsRoundConfirmOpen(true)}
-              className="rounded-full bg-green-600 px-3 py-1.5 text-sm font-bold text-white active:bg-green-700"
-            >
-              이번 회독 완료
-            </button>
-          ) : null}
         </div>
 
         <div className="flex items-center justify-between gap-4">
@@ -615,6 +628,7 @@ export default function CourseDetailPage() {
 
       <LectureSections
         collapsedSections={collapsedSections}
+        currentRound={course.currentRound ?? 1}
         editingLectureId={editingLectureId}
         groups={sectionGroups}
         lectureTitleDrafts={lectureTitleDrafts}
@@ -671,6 +685,7 @@ export default function CourseDetailPage() {
 
 function LectureSections({
   collapsedSections,
+  currentRound,
   editingLectureId,
   groups,
   lectureTitleDrafts,
@@ -692,6 +707,7 @@ function LectureSections({
   visibleLectureCount,
 }: {
   collapsedSections: Record<string, boolean>;
+  currentRound: number;
   editingLectureId: string | null;
   groups: SectionGroup[];
   lectureTitleDrafts: Record<string, string>;
@@ -715,7 +731,12 @@ function LectureSections({
   return (
     <section className="mt-5">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-950">강의 목록</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="text-lg font-bold text-gray-950">강의 목록</h2>
+          <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+            {currentRound}회독
+          </span>
+        </div>
         <span className="text-sm font-bold text-gray-500">{visibleLectureCount}개</span>
       </div>
 

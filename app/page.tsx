@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowUpDown } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { deleteCourse, exportCourses, getCourses, importCourses, updateCourseOrder } from "@/lib/storage";
@@ -106,7 +106,7 @@ export default function Home() {
   const [courses, setCourses] = useState<CourseWithLectures[]>([]);
   const [message, setMessage] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSortMode, setIsSortMode] = useState(false);
+  const [isManageMode, setIsManageMode] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
@@ -242,15 +242,15 @@ export default function Home() {
             </Link>
             <button
               type="button"
-              onClick={() => setIsSortMode((current) => !current)}
+              onClick={() => setIsManageMode((current) => !current)}
               className={`flex h-9 w-9 items-center justify-center rounded-full border ${
-                isSortMode
+                isManageMode
                   ? "border-blue-600 bg-blue-600 text-white"
                   : "border-gray-200 bg-white text-gray-700 active:bg-gray-50"
               }`}
-              aria-label="강의 순서 정렬"
+              aria-label="강의 관리"
             >
-              <ArrowUpDown size={17} />
+              <MoreHorizontal size={18} />
             </button>
           </div>
         </div>
@@ -265,12 +265,17 @@ export default function Home() {
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={courses.map((course) => course.id)} strategy={verticalListSortingStrategy}>
+              {isManageMode ? (
+                <p className="mb-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+                  강의를 길게 눌러 순서를 바꿀 수 있어요
+                </p>
+              ) : null}
               <div className="space-y-3">
                 {courses.map((course) => (
                   <SortableCourseCard
                     key={course.id}
                     course={course}
-                    isSortMode={isSortMode}
+                    isManageMode={isManageMode}
                     onDelete={handleDeleteCourse}
                   />
                 ))}
@@ -285,16 +290,16 @@ export default function Home() {
 
 function SortableCourseCard({
   course,
-  isSortMode,
+  isManageMode,
   onDelete,
 }: {
   course: CourseWithLectures;
-  isSortMode: boolean;
+  isManageMode: boolean;
   onDelete: (courseId: string, title: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: course.id,
-    disabled: !isSortMode,
+    disabled: !isManageMode,
   });
   const progress = getProgress(course);
   const planSummaries = getSectionPlanSummaries(course);
@@ -307,9 +312,8 @@ function SortableCourseCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            전체 {course.lectures.length}강 · 현재 {course.currentRound ?? 1}회독
-          </p>
+          <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
+          <p className="mt-0.5 text-xs font-bold text-blue-700">현재 {course.currentRound ?? 1}회독</p>
         </div>
         <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
           {progress}%
@@ -344,7 +348,7 @@ function SortableCourseCard({
       }`}
     >
       <div className="flex items-start gap-3">
-        {isSortMode ? (
+        {isManageMode ? (
           <div className="min-w-0 flex-1">{content}</div>
         ) : (
           <Link href={`/courses/${course.id}`} className="min-w-0 flex-1 active:opacity-80">
@@ -352,7 +356,7 @@ function SortableCourseCard({
           </Link>
         )}
         <div className="flex shrink-0 flex-col gap-2">
-          {isSortMode ? (
+          {isManageMode ? (
             <button
               type="button"
               className="flex h-11 w-11 touch-none items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 active:bg-gray-100"
@@ -363,14 +367,16 @@ function SortableCourseCard({
               <DragHandleIcon />
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => onDelete(course.id, course.title)}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-red-100 bg-white text-red-600 active:bg-red-50"
-            aria-label={`${course.title} 삭제`}
-          >
-            <TrashIcon />
-          </button>
+          {isManageMode ? (
+            <button
+              type="button"
+              onClick={() => onDelete(course.id, course.title)}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 active:bg-red-50 active:text-red-600"
+              aria-label={`${course.title} 삭제`}
+            >
+              <TrashIcon />
+            </button>
+          ) : null}
         </div>
       </div>
     </article>

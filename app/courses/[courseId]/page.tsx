@@ -95,6 +95,7 @@ export default function CourseDetailPage() {
   const [sectionTitleDraft, setSectionTitleDraft] = useState<SectionTitleDraft>(null);
   const [roundDraft, setRoundDraft] = useState<string | null>(null);
   const [isRoundConfirmOpen, setIsRoundConfirmOpen] = useState(false);
+  const [isRoundHistoryOpen, setIsRoundHistoryOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -540,6 +541,16 @@ export default function CourseDetailPage() {
                         다음 회독 시작
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCourseMenuOpen(false);
+                        setIsRoundHistoryOpen(true);
+                      }}
+                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+                    >
+                      회독 이력
+                    </button>
                   </div>
                 ) : null}
               </>
@@ -678,6 +689,11 @@ export default function CourseDetailPage() {
         isOpen={isRoundConfirmOpen}
         onCancel={() => setIsRoundConfirmOpen(false)}
         onConfirm={completeRound}
+      />
+      <RoundHistoryModal
+        course={course}
+        isOpen={isRoundHistoryOpen}
+        onClose={() => setIsRoundHistoryOpen(false)}
       />
     </main>
   );
@@ -1209,6 +1225,48 @@ function RoundConfirmModal({
             확인
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function RoundHistoryModal({
+  course,
+  isOpen,
+  onClose,
+}: {
+  course: CourseWithLectures;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  if (!isOpen) {
+    return null;
+  }
+
+  const completedRounds = course.completedRounds ?? [];
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-4 pb-6 pt-20">
+      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-bold text-gray-950">회독 이력</h2>
+        {completedRounds.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {completedRounds.map((round) => (
+              <p key={`${round.round}-${round.completedAt}`} className="text-sm font-bold text-gray-700">
+                {round.round}회독 완료 · {round.completedAt}
+              </p>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm font-bold text-gray-500">아직 완료한 회독이 없습니다.</p>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+        >
+          확인
+        </button>
       </div>
     </div>
   );

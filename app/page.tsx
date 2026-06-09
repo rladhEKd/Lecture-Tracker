@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { deleteCourse, exportCourses, getCourses, importCourses, updateCourseOrder } from "@/lib/storage";
@@ -72,29 +72,35 @@ function getSectionPlanSummaries(course: CourseWithLectures) {
           : hasEnded
             ? totalCount
             : getDateDiffDays(section.planStartDate, today) + 1;
+      const previousElapsedDays = Math.max(0, elapsedDays - 1);
       const requiredCount =
         hasEnded
           ? totalCount
           : Math.min(totalCount, Math.max(0, elapsedDays) * section.dailyTargetCount);
-      const overdueCount = Math.max(0, requiredCount - completedCount);
+      const previousRequiredCount = hasEnded
+        ? totalCount
+        : Math.min(totalCount, previousElapsedDays * section.dailyTargetCount);
+      const overdueCount = Math.max(0, previousRequiredCount - completedCount);
+      const neededCount = Math.max(0, requiredCount - Math.max(completedCount, previousRequiredCount));
+      const status = overdueCount > 0 ? "overdue" : neededCount > 0 ? "needed" : "onTrack";
 
       return {
         sectionTitle: section.title,
         overdueCount,
+        neededCount,
+        status,
       };
     })
-    .filter((summary): summary is { sectionTitle: string; overdueCount: number } => summary !== null);
+    .filter(
+      (summary): summary is {
+        sectionTitle: string;
+        overdueCount: number;
+        neededCount: number;
+        status: "overdue" | "needed" | "onTrack";
+      } => summary !== null,
+    );
 
-  const overdueSummaries = summaries.filter((summary) => summary.overdueCount > 0);
-  if (overdueSummaries.length > 0) {
-    return overdueSummaries.slice(0, 2).map((summary, index) => {
-      const extraCount = overdueSummaries.length - 2;
-      const suffix = index === 1 && extraCount > 0 ? ` 외 ${extraCount}개` : "";
-      return `${summary.sectionTitle} ${summary.overdueCount}강 밀림${suffix}`;
-    });
-  }
-
-  return summaries.slice(0, 2).map((summary) => `${summary.sectionTitle} 계획대로 진행 중`);
+  return summaries;
 }
 
 function getBackupFileName() {
@@ -250,7 +256,7 @@ export default function Home() {
               }`}
               aria-label="강의 관리"
             >
-              <MoreHorizontal size={18} />
+              <Settings2 size={17} />
             </button>
           </div>
         </div>
@@ -302,39 +308,51 @@ function SortableCourseCard({
     disabled: !isManageMode,
   });
   const progress = getProgress(course);
+  const completedCount = course.lectures.filter((lecture) => lecture.status === "COMPLETED").length;
   const planSummaries = getSectionPlanSummaries(course);
+  const visiblePlanSummaries = planSummaries.slice(0, 5);
+  const hiddenPlanSummaryCount = Math.max(0, planSummaries.length - visiblePlanSummaries.length);
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
   const content = (
     <>
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
-          <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
           <p className="mt-0.5 text-xs font-bold text-blue-700">현재 {course.currentRound ?? 1}회독</p>
         </div>
-        <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
-          {progress}%
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-xs font-bold text-gray-500">
+            {completedCount}/{course.lectures.length}
+          </span>
+          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+            {progress}%
+          </span>
+        </div>
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200">
         <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
       </div>
       {planSummaries.length > 0 ? (
-        <div className="mt-3 space-y-1">
-          {planSummaries.map((summary) => (
-            <p key={summary} className="truncate text-xs font-bold text-gray-600">
-              {summary}
-            </p>
+        <div className="mt-3 space-y-1.5 border-t border-gray-200 pt-2">
+          {visiblePlanSummaries.map((summary) => (
+            <div key={summary.sectionTitle} className="flex items-start gap-1.5 text-xs font-bold text-gray-600">
+              <PlanSummaryIcon status={summary.status} />
+              <p className="min-w-0 flex-1 break-words leading-4">
+                {summary.status === "overdue"
+                  ? `${summary.sectionTitle} ${summary.overdueCount}강 밀림`
+                  : summary.status === "needed"
+                    ? `${summary.sectionTitle} ${summary.neededCount}강 필요`
+                    : `${summary.sectionTitle} 계획대로 진행 중`}
+              </p>
+            </div>
           ))}
+          {hiddenPlanSummaryCount > 0 ? (
+            <p className="text-xs font-bold text-gray-400">추가 {hiddenPlanSummaryCount}개 Section</p>
+          ) : null}
         </div>
-      ) : null}
-      {course.completedRounds && course.completedRounds.length > 0 ? (
-        <p className="mt-2 truncate text-xs font-bold text-green-700">
-          {course.completedRounds.at(-1)?.round}회독 완료 {course.completedRounds.at(-1)?.completedAt}
-        </p>
       ) : null}
     </>
   );
@@ -402,6 +420,18 @@ function DragHandleIcon() {
       <path strokeLinecap="round" d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" />
     </svg>
   );
+}
+
+function PlanSummaryIcon({ status }: { status: "overdue" | "needed" | "onTrack" }) {
+  if (status === "overdue") {
+    return <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />;
+  }
+
+  if (status === "needed") {
+    return <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-yellow-500" aria-hidden="true" />;
+  }
+
+  return <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-500" aria-hidden="true" />;
 }
 
 function TrashIcon() {

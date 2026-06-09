@@ -29,14 +29,13 @@ import {
   updateCourseTitle,
   updateLectureStatus,
   updateLectureTitle,
-  updateSectionPlan,
   updateSectionTitle,
   updateStudyPlanGroup,
 } from "@/lib/storage";
 import type { CourseWithLectures, Lecture, LectureStatus, Section, StudyPlanGroup } from "@/lib/types";
 
 type StatusFilter = "ALL" | LectureStatus;
-type CourseMenuGroup = "SEARCH" | "PLAN" | "GROUP" | null;
+type CourseMenuGroup = "SEARCH" | "PLAN" | "ROUND" | null;
 type SectionGroup = {
   section: Section;
   lectures: Lecture[];
@@ -50,13 +49,6 @@ type SectionConfirm = {
   group: SectionGroup;
   nextStatus: LectureStatus;
   message: string;
-} | null;
-type SectionPlanDraft = {
-  sectionId: string;
-  sectionTitle: string;
-  planStartDate: string;
-  planEndDate: string;
-  dailyTargetCount: string;
 } | null;
 type SectionTitleDraft = {
   sectionId: string;
@@ -90,7 +82,6 @@ export default function CourseDetailPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [hideCompleted, setHideCompleted] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [courseTitleDraft, setCourseTitleDraft] = useState("");
   const [lectureTitleDrafts, setLectureTitleDrafts] = useState<Record<string, string>>({});
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
@@ -101,7 +92,6 @@ export default function CourseDetailPage() {
   const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
-  const [sectionPlanDraft, setSectionPlanDraft] = useState<SectionPlanDraft>(null);
   const [sectionTitleDraft, setSectionTitleDraft] = useState<SectionTitleDraft>(null);
   const [planGroupDraft, setPlanGroupDraft] = useState<PlanGroupDraft>(null);
   const [roundDraft, setRoundDraft] = useState<string | null>(null);
@@ -346,46 +336,6 @@ export default function CourseDetailPage() {
     showFeedback("섹션 상태가 변경되었습니다");
   }
 
-  function openSectionPlan(section: Section) {
-    setOpenSectionMenuId(null);
-    setIsCourseMenuOpen(false);
-    setSectionPlanDraft({
-      sectionId: section.id,
-      sectionTitle: section.title,
-      planStartDate: section.planStartDate ?? "",
-      planEndDate: section.planEndDate ?? "",
-      dailyTargetCount: section.dailyTargetCount ? String(section.dailyTargetCount) : "",
-    });
-  }
-
-  function saveSectionPlan() {
-    if (!sectionPlanDraft) {
-      return;
-    }
-
-    const updatedSection = updateSectionPlan(params.courseId, sectionPlanDraft.sectionId, {
-      planStartDate: sectionPlanDraft.planStartDate,
-      planEndDate: sectionPlanDraft.planEndDate,
-      dailyTargetCount: Number(sectionPlanDraft.dailyTargetCount),
-    });
-
-    if (!updatedSection) {
-      setSectionPlanDraft(null);
-      return;
-    }
-
-    setCourse((current) =>
-      current
-        ? {
-            ...current,
-            sections: current.sections.map((section) => (section.id === updatedSection.id ? updatedSection : section)),
-          }
-        : current,
-    );
-    setSectionPlanDraft(null);
-    showFeedback("계획이 저장되었습니다");
-  }
-
   function openCreatePlanGroup() {
     setIsCourseMenuOpen(false);
     setPlanGroupDraft({ title: "", sectionIds: [], planStartDate: "", planEndDate: "", dailyTargetCount: "" });
@@ -507,7 +457,7 @@ export default function CourseDetailPage() {
         </div>
       ) : null}
 
-      <header className="mb-4 space-y-3">
+      <header className="mb-3 space-y-2.5">
         <div className="flex min-h-10 items-center gap-2">
           <Link
             href="/"
@@ -578,12 +528,13 @@ export default function CourseDetailPage() {
                       setIsCourseMenuOpen(false);
                       setIsRoundHistoryOpen(true);
                     }}
-                    onOpenSearch={() => {
-                      setCourseMenuGroup(null);
-                      setIsCourseMenuOpen(false);
-                      setIsFilterOpen(true);
-                    }}
-                    onOpenSectionPlan={openSectionPlan}
+                    filterOptions={filterOptions}
+                    hideCompleted={hideCompleted}
+                    searchTerm={searchTerm}
+                    statusFilter={statusFilter}
+                    onHideCompletedChange={setHideCompleted}
+                    onSearchChange={setSearchTerm}
+                    onStatusFilterChange={setStatusFilter}
                     onToggleGroup={(group) => setCourseMenuGroup((current) => (current === group ? null : group))}
                   />
                 ) : null}
@@ -592,82 +543,32 @@ export default function CourseDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <p className="text-sm font-bold text-gray-700">전체 진도</p>
-            <span className="text-xs font-bold text-gray-400">·</span>
-            <p className="text-xs font-bold text-gray-500">
-              {stats.completedCount}/{stats.totalCount}
-            </p>
+        <div className="w-full rounded-xl bg-gray-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="text-sm font-bold text-gray-700">전체 진도</p>
+              <span className="text-xs font-bold text-gray-400">·</span>
+              <p className="text-xs font-bold text-gray-500">
+                {stats.completedCount}/{stats.totalCount}
+              </p>
+            </div>
+            <p className="text-sm font-bold text-blue-700">{stats.progressRate}%</p>
           </div>
-          <p className="text-sm font-bold text-blue-700">{stats.progressRate}%</p>
-        </div>
-        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-gray-200">
-          <div className="h-full rounded-full bg-blue-500" style={{ width: `${stats.progressRate}%` }} />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="강의명 또는 섹션명 검색"
-            className="min-h-10 min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-          />
-          <button
-            type="button"
-            onClick={() => setIsFilterOpen((current) => !current)}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${
-              isFilterOpen || statusFilter !== "ALL" || hideCompleted
-                ? "border-blue-600 bg-blue-600 text-white"
-                : "border-gray-200 bg-white text-gray-600 active:bg-gray-100"
-            }`}
-            aria-label="필터"
-          >
-            <SlidersHorizontal size={17} />
-          </button>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
+            <div className="h-full rounded-full bg-blue-500" style={{ width: `${stats.progressRate}%` }} />
+          </div>
         </div>
 
-        {statusFilter !== "ALL" || hideCompleted ? (
+        {searchTerm.trim() || statusFilter !== "ALL" || hideCompleted ? (
           <p className="mt-2 truncate px-1 text-xs font-bold text-blue-700">
-            {[hideCompleted ? "완강 숨김" : null, statusFilter !== "ALL" ? statusOptions.find((option) => option.value === statusFilter)?.label : null]
+            {[
+              searchTerm.trim() ? `검색: ${searchTerm.trim()}` : null,
+              hideCompleted ? "완강 숨김" : null,
+              statusFilter !== "ALL" ? statusOptions.find((option) => option.value === statusFilter)?.label : null,
+            ]
               .filter(Boolean)
               .join(" · ")}
           </p>
-        ) : null}
-
-        {isFilterOpen ? (
-          <div className="mt-2 rounded-xl bg-white p-2">
-            <div className="grid grid-cols-4 gap-1.5">
-              {filterOptions.map((option) => {
-                const isActive = statusFilter === option.value;
-
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setStatusFilter(option.value)}
-                    className={`min-h-8 rounded-full border px-2 text-xs font-bold ${
-                      isActive
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <label className="mt-2 flex min-h-9 items-center justify-between gap-3 rounded-xl bg-gray-50 px-3">
-              <span className="text-sm font-bold text-gray-800">완료 강의 숨기기</span>
-              <input
-                type="checkbox"
-                checked={hideCompleted}
-                onChange={(event) => setHideCompleted(event.target.checked)}
-                className="h-5 w-5 accent-blue-600"
-              />
-            </label>
-          </div>
         ) : null}
       </header>
 
@@ -695,12 +596,6 @@ export default function CourseDetailPage() {
       />
 
       <ConfirmModal confirm={sectionConfirm} onCancel={() => setSectionConfirm(null)} onConfirm={applySectionConfirm} />
-      <SectionPlanModal
-        draft={sectionPlanDraft}
-        onCancel={() => setSectionPlanDraft(null)}
-        onChange={setSectionPlanDraft}
-        onSave={saveSectionPlan}
-      />
       <SectionTitleModal
         draft={sectionTitleDraft}
         onCancel={() => setSectionTitleDraft(null)}
@@ -1007,34 +902,43 @@ function LectureRow({
 
 function CourseMoreMenu({
   activeGroup,
+  filterOptions,
+  hideCompleted,
   isCurrentRoundCompleted,
   planGroups,
+  searchTerm,
   sections,
+  statusFilter,
   onCreatePlanGroup,
   onDeletePlanGroup,
   onEditPlanGroup,
+  onHideCompletedChange,
   onOpenRoundConfirm,
   onOpenRoundEdit,
   onOpenRoundHistory,
-  onOpenSearch,
-  onOpenSectionPlan,
+  onSearchChange,
+  onStatusFilterChange,
   onToggleGroup,
 }: {
   activeGroup: CourseMenuGroup;
+  filterOptions: { value: StatusFilter; label: string }[];
+  hideCompleted: boolean;
   isCurrentRoundCompleted: boolean;
   planGroups: StudyPlanGroup[];
+  searchTerm: string;
   sections: Section[];
+  statusFilter: StatusFilter;
   onCreatePlanGroup: () => void;
   onDeletePlanGroup: (group: StudyPlanGroup) => void;
   onEditPlanGroup: (group: StudyPlanGroup) => void;
+  onHideCompletedChange: Dispatch<SetStateAction<boolean>>;
   onOpenRoundConfirm: () => void;
   onOpenRoundEdit: () => void;
   onOpenRoundHistory: () => void;
-  onOpenSearch: () => void;
-  onOpenSectionPlan: (section: Section) => void;
+  onSearchChange: Dispatch<SetStateAction<string>>;
+  onStatusFilterChange: Dispatch<SetStateAction<StatusFilter>>;
   onToggleGroup: (group: Exclude<CourseMenuGroup, null>) => void;
 }) {
-  const sortedSections = [...sections].sort((a, b) => a.order - b.order);
   const sectionTitleMap = new Map(sections.map((section) => [section.id, section.title]));
 
   return (
@@ -1046,91 +950,99 @@ function CourseMoreMenu({
         <CourseMenuGroupButton active={activeGroup === "PLAN"} onClick={() => onToggleGroup("PLAN")}>
           계획
         </CourseMenuGroupButton>
-        <CourseMenuGroupButton active={activeGroup === "GROUP"} onClick={() => onToggleGroup("GROUP")}>
-          그룹
+        <CourseMenuGroupButton active={activeGroup === "ROUND"} onClick={() => onToggleGroup("ROUND")}>
+          회독
         </CourseMenuGroupButton>
       </div>
 
       {activeGroup === "SEARCH" ? (
-        <div className="mt-2 rounded-xl bg-gray-50 p-2">
-          <button
-            type="button"
-            onClick={onOpenSearch}
-            className="flex min-h-10 w-full items-center justify-between rounded-lg px-3 text-left text-sm font-bold text-gray-800 active:bg-gray-100"
-          >
-            검색/필터 열기
-            <SlidersHorizontal size={16} className="text-gray-500" />
-          </button>
+        <div className="mt-2 space-y-2 rounded-xl bg-gray-50 p-2">
+          <div className="flex items-center gap-2 rounded-lg bg-white px-3">
+            <SlidersHorizontal size={16} className="shrink-0 text-gray-500" />
+            <input
+              value={searchTerm}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="강의명 또는 섹션명 검색"
+              className="min-h-10 min-w-0 flex-1 bg-transparent text-sm text-gray-950 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {filterOptions.map((option) => {
+              const isActive = statusFilter === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onStatusFilterChange(option.value)}
+                  className={`min-h-8 rounded-full border px-2 text-xs font-bold ${
+                    isActive
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex min-h-9 items-center justify-between gap-3 rounded-lg bg-white px-3">
+            <span className="text-sm font-bold text-gray-800">완료 강의 숨기기</span>
+            <input
+              type="checkbox"
+              checked={hideCompleted}
+              onChange={(event) => onHideCompletedChange(event.target.checked)}
+              className="h-5 w-5 accent-blue-600"
+            />
+          </label>
         </div>
       ) : null}
 
       {activeGroup === "PLAN" ? (
-        <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-xl bg-gray-50 p-2">
-          {sortedSections.map((section) => {
-            const hasPlan = section.planStartDate && section.dailyTargetCount;
-
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => onOpenSectionPlan(section)}
-                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-left active:bg-gray-100"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-800">{section.title}</span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
-                    hasPlan ? "bg-blue-50 text-blue-700" : "bg-gray-200 text-gray-500"
-                  }`}
-                >
-                  {hasPlan ? "수정" : "설정"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {activeGroup === "GROUP" ? (
-        <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-xl bg-gray-50 p-2">
+        <div className="mt-2 max-h-72 overflow-y-auto rounded-xl bg-gray-50 p-2">
+          <p className="px-1 pb-1 text-xs font-bold text-gray-500">계획 그룹</p>
           <button
             type="button"
             onClick={onCreatePlanGroup}
-            className="flex min-h-10 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-bold text-white active:bg-blue-700"
+            className="mb-1 flex min-h-9 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-bold text-white active:bg-blue-700"
           >
             계획 그룹 만들기
           </button>
-          {planGroups.length === 0 ? (
-            <p className="px-2 py-3 text-center text-xs font-bold leading-5 text-gray-500">아직 계획 그룹이 없습니다.</p>
-          ) : (
-            planGroups.map((group) => (
-              <div key={group.id} className="rounded-xl bg-white p-2">
-                <p className="truncate text-sm font-bold text-gray-900">{group.title}</p>
-                <p className="mt-0.5 line-clamp-2 text-xs font-bold leading-4 text-gray-500">
-                  {group.sectionIds.map((sectionId) => sectionTitleMap.get(sectionId)).filter(Boolean).join(", ")}
-                </p>
-                <div className="mt-2 flex justify-end gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onEditPlanGroup(group)}
-                    className="rounded-full px-2.5 py-1 text-xs font-bold text-blue-700 active:bg-blue-50"
-                  >
-                    수정
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeletePlanGroup(group)}
-                    className="rounded-full px-2.5 py-1 text-xs font-bold text-red-600 active:bg-red-50"
-                  >
-                    삭제
-                  </button>
+            {planGroups.length === 0 ? (
+              <p className="px-2 py-2 text-center text-xs font-bold leading-5 text-gray-500">아직 계획 그룹이 없습니다.</p>
+            ) : (
+              planGroups.map((group) => (
+                <div key={group.id} className="flex items-center gap-2 border-b border-gray-200 py-2 last:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-gray-900">{group.title}</p>
+                    <p className="mt-0.5 truncate text-xs font-bold text-gray-500">
+                      {group.sectionIds.map((sectionId) => sectionTitleMap.get(sectionId)).filter(Boolean).join(", ")}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onEditPlanGroup(group)}
+                      className="rounded-full px-2 py-1 text-xs font-bold text-blue-700 active:bg-blue-50"
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeletePlanGroup(group)}
+                      className="rounded-full px-2 py-1 text-xs font-bold text-red-600 active:bg-red-50"
+                    >
+                      삭제
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
         </div>
       ) : null}
 
-      <div className="mt-2 border-t border-gray-100 pt-1">
+      {activeGroup === "ROUND" ? (
+      <div className="mt-2 rounded-xl bg-gray-50 p-2">
         <button
           type="button"
           onClick={onOpenRoundEdit}
@@ -1155,6 +1067,7 @@ function CourseMoreMenu({
           회독 이력
         </button>
       </div>
+      ) : null}
     </div>
   );
 }
@@ -1254,45 +1167,12 @@ function PlanGroupModal({
   );
 }
 
-function SectionPlanModal({
-  draft,
-  onCancel,
-  onChange,
-  onSave,
-}: {
-  draft: SectionPlanDraft;
-  onCancel: () => void;
-  onChange: Dispatch<SetStateAction<SectionPlanDraft>>;
-  onSave: () => void;
-}) {
-  if (!draft) {
-    return null;
-  }
-
-  return (
-    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))]">
-      <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-screen-sm flex-col rounded-2xl bg-white shadow-xl">
-        <div className="shrink-0 px-4 pt-4">
-          <h2 className="text-lg font-bold text-gray-950">계획 설정</h2>
-          <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.sectionTitle}</p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          <div className="space-y-2.5">
-            <PlanFields draft={draft} onChange={onChange} />
-          </div>
-        </div>
-        <ModalActions onCancel={onCancel} onSave={onSave} />
-      </div>
-    </div>
-  );
-}
-
-function PlanFields<T extends SectionPlanDraft | PlanGroupDraft>({
+function PlanFields({
   draft,
   onChange,
 }: {
-  draft: NonNullable<T>;
-  onChange: Dispatch<SetStateAction<T>>;
+  draft: NonNullable<PlanGroupDraft>;
+  onChange: Dispatch<SetStateAction<PlanGroupDraft>>;
 }) {
   return (
     <>

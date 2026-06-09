@@ -54,48 +54,87 @@ function getDateDiffDays(fromDate: string, toDate: string) {
   return Math.floor((to - from) / 86400000);
 }
 
-function getSectionPlanSummaries(course: CourseWithLectures) {
+type PlanSummary = {
+  title: string;
+  overdueCount: number;
+  neededCount: number;
+  status: "overdue" | "needed" | "onTrack";
+};
+
+function calculatePlanSummary({
+  title,
+  totalCount,
+  completedCount,
+  planStartDate,
+  planEndDate,
+  dailyTargetCount,
+  today,
+}: {
+  title: string;
+  totalCount: number;
+  completedCount: number;
+  planStartDate?: string;
+  planEndDate?: string;
+  dailyTargetCount?: number;
+  today: string;
+}): PlanSummary | null {
+  if (!planStartDate || !dailyTargetCount) {
+    return null;
+  }
+
+  const hasEnded = Boolean(planEndDate && today > planEndDate);
+  const elapsedDays =
+    today < planStartDate ? 0 : hasEnded ? totalCount : getDateDiffDays(planStartDate, today) + 1;
+  const requiredCount = hasEnded
+    ? totalCount
+    : Math.min(totalCount, Math.max(0, elapsedDays) * dailyTargetCount);
+  const overdueCount = Math.max(0, requiredCount - completedCount);
+
+  return {
+    title,
+    overdueCount,
+    neededCount: 0,
+    status: overdueCount > 0 ? "overdue" : "onTrack",
+  };
+}
+
+function getPlanSummaries(course: CourseWithLectures) {
   const today = getKoreaTodayDateString();
-  const summaries = course.sections
+  const groupedSectionIds = new Set<string>();
+  const groupSummaries = (course.planGroups ?? [])
     .map((section) => {
-      if (!section.planStartDate || !section.dailyTargetCount) {
-        return null;
-      }
+      section.sectionIds.forEach((sectionId) => groupedSectionIds.add(sectionId));
+      const groupLectures = course.lectures.filter((lecture) => section.sectionIds.includes(lecture.sectionId));
 
-      const sectionLectures = course.lectures.filter((lecture) => lecture.sectionId === section.id);
-      const totalCount = sectionLectures.length;
-      const completedCount = sectionLectures.filter((lecture) => lecture.status === "COMPLETED").length;
-      const hasEnded = Boolean(section.planEndDate && today > section.planEndDate);
-      const elapsedDays =
-        today < section.planStartDate
-          ? 0
-          : hasEnded
-            ? totalCount
-            : getDateDiffDays(section.planStartDate, today) + 1;
-      const requiredCount =
-        hasEnded
-          ? totalCount
-          : Math.min(totalCount, Math.max(0, elapsedDays) * section.dailyTargetCount);
-      const overdueCount = Math.max(0, requiredCount - completedCount);
-      const status = overdueCount > 0 ? "overdue" : "onTrack";
-
-      return {
-        sectionTitle: section.title,
-        overdueCount,
-        neededCount: 0,
-        status,
-      };
+      return calculatePlanSummary({
+        title: section.title,
+        totalCount: groupLectures.length,
+        completedCount: groupLectures.filter((lecture) => lecture.status === "COMPLETED").length,
+        planStartDate: section.planStartDate,
+        planEndDate: section.planEndDate,
+        dailyTargetCount: section.dailyTargetCount,
+        today,
+      });
     })
-    .filter(
-      (summary): summary is {
-        sectionTitle: string;
-        overdueCount: number;
-        neededCount: number;
-        status: "overdue" | "needed" | "onTrack";
-      } => summary !== null,
-    );
+    .filter((summary): summary is PlanSummary => summary !== null);
+  const sectionSummaries = course.sections
+    .filter((section) => !groupedSectionIds.has(section.id))
+    .map((section) => {
+      const sectionLectures = course.lectures.filter((lecture) => lecture.sectionId === section.id);
 
-  return summaries;
+      return calculatePlanSummary({
+        title: section.title,
+        totalCount: sectionLectures.length,
+        completedCount: sectionLectures.filter((lecture) => lecture.status === "COMPLETED").length,
+        planStartDate: section.planStartDate,
+        planEndDate: section.planEndDate,
+        dailyTargetCount: section.dailyTargetCount,
+        today,
+      });
+    })
+    .filter((summary): summary is PlanSummary => summary !== null);
+
+  return [...groupSummaries, ...sectionSummaries];
 }
 
 function getBackupFileName() {
@@ -304,7 +343,7 @@ function SortableCourseCard({
   });
   const progress = getProgress(course);
   const completedCount = course.lectures.filter((lecture) => lecture.status === "COMPLETED").length;
-  const planSummaries = getSectionPlanSummaries(course);
+  const planSummaries = getPlanSummaries(course);
   const visiblePlanSummaries = planSummaries.slice(0, 5);
   const hiddenPlanSummaryCount = Math.max(0, planSummaries.length - visiblePlanSummaries.length);
   const style = {
@@ -333,14 +372,14 @@ function SortableCourseCard({
       {planSummaries.length > 0 ? (
         <div className="mt-3 space-y-1.5 border-t border-gray-200 pt-2">
           {visiblePlanSummaries.map((summary) => (
-            <div key={summary.sectionTitle} className="flex items-start gap-1.5 text-xs font-bold text-gray-600">
+            <div key={summary.title} className="flex items-start gap-1.5 text-xs font-bold text-gray-600">
               <PlanSummaryIcon status={summary.status} />
               <p className="min-w-0 flex-1 break-words leading-4">
                 {summary.status === "overdue"
-                  ? `${summary.sectionTitle} ${summary.overdueCount}강 밀림`
+                  ? `${summary.title} ${summary.overdueCount}강 밀림`
                   : summary.status === "needed"
-                    ? `${summary.sectionTitle} ${summary.neededCount}강 필요`
-                    : `${summary.sectionTitle} 계획대로 진행 중`}
+                    ? `${summary.title} ${summary.neededCount}강 필요`
+                    : `${summary.title} 계획대로 진행 중`}
               </p>
             </div>
           ))}

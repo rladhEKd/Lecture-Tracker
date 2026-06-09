@@ -1,6 +1,6 @@
 "use client";
 
-import type { Course, CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/types";
+import type { Course, CourseWithLectures, Lecture, LectureStatus, Section, StudyPlanGroup } from "@/lib/types";
 
 const STORAGE_KEY = "lecture-tracker:courses";
 const DEFAULT_SECTION_TITLE = "기본 섹션";
@@ -8,6 +8,15 @@ const DEFAULT_SECTION_TITLE = "기본 섹션";
 type StoredCourse = Course & {
   sections?: Section[];
   lectures?: (Omit<Lecture, "sectionId"> & { sectionId?: string })[];
+  planGroups?: StudyPlanGroup[];
+};
+
+type StudyPlanGroupInput = {
+  title: string;
+  sectionIds: string[];
+  planStartDate?: string;
+  planEndDate?: string;
+  dailyTargetCount?: number;
 };
 
 function createId() {
@@ -80,6 +89,22 @@ function normalizeCourse(course: StoredCourse, courseIndex = 0): CourseWithLectu
       : [defaultSection];
 
   const sectionIds = new Set(sections.map((section) => section.id));
+  const planGroups =
+    Array.isArray(course.planGroups)
+      ? course.planGroups.map((group) => ({
+          ...group,
+          courseId: course.id,
+          sectionIds: Array.isArray(group.sectionIds)
+            ? group.sectionIds.filter((sectionId) => sectionIds.has(sectionId))
+            : [],
+          planStartDate: typeof group.planStartDate === "string" ? group.planStartDate : undefined,
+          planEndDate: typeof group.planEndDate === "string" ? group.planEndDate : undefined,
+          dailyTargetCount:
+            typeof group.dailyTargetCount === "number" && group.dailyTargetCount > 0
+              ? group.dailyTargetCount
+              : undefined,
+        }))
+      : [];
   const fallbackSectionId = sections[0]?.id ?? defaultSection.id;
   const lectures = (course.lectures ?? []).map((lecture) => {
     const sectionId = lecture.sectionId && sectionIds.has(lecture.sectionId) ? lecture.sectionId : fallbackSectionId;
@@ -105,6 +130,7 @@ function normalizeCourse(course: StoredCourse, courseIndex = 0): CourseWithLectu
       : [],
     sections,
     lectures,
+    planGroups,
   };
 }
 
@@ -405,6 +431,127 @@ export function updateSectionTitle(courseId: string, sectionId: string, title: s
   return updatedSection;
 }
 
+function normalizePlanGroupInput(input: StudyPlanGroupInput) {
+  return {
+    title: input.title.trim(),
+    sectionIds: Array.from(new Set(input.sectionIds)).filter(Boolean),
+    planStartDate: input.planStartDate?.trim() || undefined,
+    planEndDate: input.planEndDate?.trim() || undefined,
+    dailyTargetCount:
+      typeof input.dailyTargetCount === "number" &&
+      Number.isFinite(input.dailyTargetCount) &&
+      input.dailyTargetCount > 0
+        ? Math.floor(input.dailyTargetCount)
+        : undefined,
+  };
+}
+
+export function createStudyPlanGroup(courseId: string, input: StudyPlanGroupInput): CourseWithLectures | null {
+  const nextInput = normalizePlanGroupInput(input);
+  if (!nextInput.title || nextInput.sectionIds.length === 0) {
+    return null;
+  }
+
+  const courses = readCourses();
+  let updatedCourse: CourseWithLectures | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    const sectionIds = new Set(course.sections.map((section) => section.id));
+    const group: StudyPlanGroup = {
+      id: createId(),
+      courseId,
+      title: nextInput.title,
+      sectionIds: nextInput.sectionIds.filter((sectionId) => sectionIds.has(sectionId)),
+      planStartDate: nextInput.planStartDate,
+      planEndDate: nextInput.planEndDate,
+      dailyTargetCount: nextInput.dailyTargetCount,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (group.sectionIds.length === 0) {
+      updatedCourse = course;
+      return course;
+    }
+
+    updatedCourse = {
+      ...course,
+      planGroups: [...(course.planGroups ?? []), group],
+    };
+
+    return updatedCourse;
+  });
+
+  writeCourses(nextCourses);
+  return updatedCourse;
+}
+
+export function updateStudyPlanGroup(
+  courseId: string,
+  groupId: string,
+  input: StudyPlanGroupInput,
+): CourseWithLectures | null {
+  const nextInput = normalizePlanGroupInput(input);
+  if (!nextInput.title || nextInput.sectionIds.length === 0) {
+    return null;
+  }
+
+  const courses = readCourses();
+  let updatedCourse: CourseWithLectures | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    const sectionIds = new Set(course.sections.map((section) => section.id));
+    updatedCourse = {
+      ...course,
+      planGroups: (course.planGroups ?? []).map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              title: nextInput.title,
+              sectionIds: nextInput.sectionIds.filter((sectionId) => sectionIds.has(sectionId)),
+              planStartDate: nextInput.planStartDate,
+              planEndDate: nextInput.planEndDate,
+              dailyTargetCount: nextInput.dailyTargetCount,
+            }
+          : group,
+      ),
+    };
+
+    return updatedCourse;
+  });
+
+  writeCourses(nextCourses);
+  return updatedCourse;
+}
+
+export function deleteStudyPlanGroup(courseId: string, groupId: string): CourseWithLectures | null {
+  const courses = readCourses();
+  let updatedCourse: CourseWithLectures | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    updatedCourse = {
+      ...course,
+      planGroups: (course.planGroups ?? []).filter((group) => group.id !== groupId),
+    };
+
+    return updatedCourse;
+  });
+
+  writeCourses(nextCourses);
+  return updatedCourse;
+}
+
 export function deleteSection(courseId: string, sectionId: string) {
   const courses = readCourses();
 
@@ -417,6 +564,12 @@ export function deleteSection(courseId: string, sectionId: string) {
       ...course,
       sections: course.sections.filter((section) => section.id !== sectionId),
       lectures: course.lectures.filter((lecture) => lecture.sectionId !== sectionId),
+      planGroups: (course.planGroups ?? [])
+        .map((group) => ({
+          ...group,
+          sectionIds: group.sectionIds.filter((item) => item !== sectionId),
+        }))
+        .filter((group) => group.sectionIds.length > 0),
     };
   });
 
@@ -434,6 +587,7 @@ export function createCourse(title: string, lines: string[]): Course {
     order: 0,
     currentRound: 1,
     completedRounds: [],
+    planGroups: [],
     sections,
     lectures,
   };

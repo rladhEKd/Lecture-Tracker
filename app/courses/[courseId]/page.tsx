@@ -20,20 +20,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
   completeCourseRound,
-  deleteSection,
+  createStudyPlanGroup,
   deleteLecture,
+  deleteSection,
+  deleteStudyPlanGroup,
   getCourse,
-  updateCourseTitle,
   updateCourseRound,
+  updateCourseTitle,
   updateLectureStatus,
   updateLectureTitle,
   updateSectionPlan,
   updateSectionTitle,
+  updateStudyPlanGroup,
 } from "@/lib/storage";
-import type { CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/types";
+import type { CourseWithLectures, Lecture, LectureStatus, Section, StudyPlanGroup } from "@/lib/types";
 
 type StatusFilter = "ALL" | LectureStatus;
-type SectionAction = "COMPLETE" | "IN_PROGRESS";
+type CourseMenuGroup = "SEARCH" | "PLAN" | "GROUP" | null;
 type SectionGroup = {
   section: Section;
   lectures: Lecture[];
@@ -42,10 +45,8 @@ type SectionGroup = {
   progressRate: number;
   allCompleted: boolean;
   allInProgress: boolean;
-  sectionMatchesSearch: boolean;
 };
 type SectionConfirm = {
-  action: SectionAction;
   group: SectionGroup;
   nextStatus: LectureStatus;
   message: string;
@@ -61,6 +62,14 @@ type SectionTitleDraft = {
   sectionId: string;
   currentTitle: string;
   title: string;
+} | null;
+type PlanGroupDraft = {
+  id?: string;
+  title: string;
+  sectionIds: string[];
+  planStartDate: string;
+  planEndDate: string;
+  dailyTargetCount: string;
 } | null;
 
 const statusOptions: { value: LectureStatus; label: string }[] = [
@@ -86,6 +95,7 @@ export default function CourseDetailPage() {
   const [lectureTitleDrafts, setLectureTitleDrafts] = useState<Record<string, string>>({});
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
   const [isCourseMenuOpen, setIsCourseMenuOpen] = useState(false);
+  const [courseMenuGroup, setCourseMenuGroup] = useState<CourseMenuGroup>(null);
   const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
   const [openLectureMenuId, setOpenLectureMenuId] = useState<string | null>(null);
   const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
@@ -93,6 +103,7 @@ export default function CourseDetailPage() {
   const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
   const [sectionPlanDraft, setSectionPlanDraft] = useState<SectionPlanDraft>(null);
   const [sectionTitleDraft, setSectionTitleDraft] = useState<SectionTitleDraft>(null);
+  const [planGroupDraft, setPlanGroupDraft] = useState<PlanGroupDraft>(null);
   const [roundDraft, setRoundDraft] = useState<string | null>(null);
   const [isRoundConfirmOpen, setIsRoundConfirmOpen] = useState(false);
   const [isRoundHistoryOpen, setIsRoundHistoryOpen] = useState(false);
@@ -105,9 +116,7 @@ export default function CourseDetailPage() {
     setLectureTitleDrafts(
       Object.fromEntries((nextCourse?.lectures ?? []).map((lecture) => [lecture.id, lecture.title])),
     );
-    setCollapsedSections(
-      Object.fromEntries((nextCourse?.sections ?? []).map((section) => [section.id, true])),
-    );
+    setCollapsedSections(Object.fromEntries((nextCourse?.sections ?? []).map((section) => [section.id, true])));
   }, [params.courseId]);
 
   useEffect(() => {
@@ -125,6 +134,7 @@ export default function CourseDetailPage() {
 
     return { totalCount, completedCount, progressRate };
   }, [course]);
+
   const isCurrentRoundCompleted = stats.totalCount > 0 && stats.completedCount === stats.totalCount;
 
   const sectionGroups = useMemo(() => {
@@ -152,16 +162,7 @@ export default function CourseDetailPage() {
         const allCompleted = lectures.length > 0 && lectures.every((lecture) => lecture.status === "COMPLETED");
         const allInProgress = lectures.length > 0 && lectures.every((lecture) => lecture.status === "IN_PROGRESS");
 
-        return {
-          section,
-          lectures,
-          visibleLectures,
-          completedCount,
-          progressRate,
-          allCompleted,
-          allInProgress,
-          sectionMatchesSearch,
-        };
+        return { section, lectures, visibleLectures, completedCount, progressRate, allCompleted, allInProgress };
       })
       .filter((group) => group.visibleLectures.length > 0 || group.lectures.length === 0);
   }, [course, hideCompleted, searchTerm, statusFilter]);
@@ -228,9 +229,7 @@ export default function CourseDetailPage() {
     }
 
     setCourse(updatedCourse);
-    setLectureTitleDrafts(
-      Object.fromEntries(updatedCourse.lectures.map((lecture) => [lecture.id, lecture.title])),
-    );
+    setLectureTitleDrafts(Object.fromEntries(updatedCourse.lectures.map((lecture) => [lecture.id, lecture.title])));
     setIsRoundConfirmOpen(false);
     setStatusFilter("ALL");
     setHideCompleted(false);
@@ -248,18 +247,14 @@ export default function CourseDetailPage() {
       return;
     }
 
-    setCourse((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        lectures: current.lectures.map((lecture) =>
-          lecture.id === lectureId ? updatedLecture : lecture,
-        ),
-      };
-    });
+    setCourse((current) =>
+      current
+        ? {
+            ...current,
+            lectures: current.lectures.map((lecture) => (lecture.id === lectureId ? updatedLecture : lecture)),
+          }
+        : current,
+    );
     setLectureTitleDrafts((current) => ({ ...current, [lectureId]: updatedLecture.title }));
     setEditingLectureId(null);
     showFeedback("저장되었습니다");
@@ -274,8 +269,7 @@ export default function CourseDetailPage() {
   }
 
   function handleLectureDelete(lectureId: string, title: string) {
-    const confirmed = window.confirm(`"${title}" 강의를 삭제할까요?`);
-    if (!confirmed) {
+    if (!window.confirm(`"${title}" 강의를 삭제할까요?`)) {
       return;
     }
 
@@ -292,26 +286,20 @@ export default function CourseDetailPage() {
 
   function handleLectureToggle(lecture: Lecture) {
     const nextStatus: LectureStatus =
-      lecture.status === "NOT_STARTED"
-        ? "IN_PROGRESS"
-        : lecture.status === "IN_PROGRESS"
-          ? "COMPLETED"
-          : "NOT_STARTED";
+      lecture.status === "NOT_STARTED" ? "IN_PROGRESS" : lecture.status === "IN_PROGRESS" ? "COMPLETED" : "NOT_STARTED";
     const updatedLecture = updateLectureStatus(params.courseId, lecture.id, nextStatus);
     if (!updatedLecture) {
       return;
     }
 
-    setCourse((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        lectures: current.lectures.map((item) => (item.id === lecture.id ? updatedLecture : item)),
-      };
-    });
+    setCourse((current) =>
+      current
+        ? {
+            ...current,
+            lectures: current.lectures.map((item) => (item.id === lecture.id ? updatedLecture : item)),
+          }
+        : current,
+    );
     showFeedback("상태가 변경되었습니다");
   }
 
@@ -331,11 +319,7 @@ export default function CourseDetailPage() {
   }
 
   function openSectionConfirm(group: SectionGroup) {
-    const nextStatus: LectureStatus = group.allCompleted
-      ? "NOT_STARTED"
-      : group.allInProgress
-        ? "COMPLETED"
-        : "IN_PROGRESS";
+    const nextStatus: LectureStatus = group.allCompleted ? "NOT_STARTED" : group.allInProgress ? "COMPLETED" : "IN_PROGRESS";
     const count = group.lectures.length;
     const message =
       nextStatus === "NOT_STARTED"
@@ -345,7 +329,7 @@ export default function CourseDetailPage() {
           : `이 섹션의 ${count}개 강의를 모두 수강중으로 변경할까요?`;
 
     setOpenSectionMenuId(null);
-    setSectionConfirm({ action: "IN_PROGRESS", group, nextStatus, message });
+    setSectionConfirm({ group, nextStatus, message });
   }
 
   function applySectionConfirm() {
@@ -364,6 +348,7 @@ export default function CourseDetailPage() {
 
   function openSectionPlan(section: Section) {
     setOpenSectionMenuId(null);
+    setIsCourseMenuOpen(false);
     setSectionPlanDraft({
       sectionId: section.id,
       sectionTitle: section.title,
@@ -389,29 +374,77 @@ export default function CourseDetailPage() {
       return;
     }
 
-    setCourse((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === updatedSection.id ? updatedSection : section,
-        ),
-      };
-    });
+    setCourse((current) =>
+      current
+        ? {
+            ...current,
+            sections: current.sections.map((section) => (section.id === updatedSection.id ? updatedSection : section)),
+          }
+        : current,
+    );
     setSectionPlanDraft(null);
     showFeedback("계획이 저장되었습니다");
   }
 
+  function openCreatePlanGroup() {
+    setIsCourseMenuOpen(false);
+    setPlanGroupDraft({ title: "", sectionIds: [], planStartDate: "", planEndDate: "", dailyTargetCount: "" });
+  }
+
+  function openEditPlanGroup(group: StudyPlanGroup) {
+    setIsCourseMenuOpen(false);
+    setPlanGroupDraft({
+      id: group.id,
+      title: group.title,
+      sectionIds: group.sectionIds,
+      planStartDate: group.planStartDate ?? "",
+      planEndDate: group.planEndDate ?? "",
+      dailyTargetCount: group.dailyTargetCount ? String(group.dailyTargetCount) : "",
+    });
+  }
+
+  function savePlanGroup() {
+    if (!planGroupDraft) {
+      return;
+    }
+
+    const input = {
+      title: planGroupDraft.title,
+      sectionIds: planGroupDraft.sectionIds,
+      planStartDate: planGroupDraft.planStartDate,
+      planEndDate: planGroupDraft.planEndDate,
+      dailyTargetCount: Number(planGroupDraft.dailyTargetCount),
+    };
+    const updatedCourse = planGroupDraft.id
+      ? updateStudyPlanGroup(params.courseId, planGroupDraft.id, input)
+      : createStudyPlanGroup(params.courseId, input);
+
+    if (!updatedCourse) {
+      return;
+    }
+
+    setCourse(updatedCourse);
+    setPlanGroupDraft(null);
+    showFeedback("계획 그룹이 저장되었습니다");
+  }
+
+  function handleDeletePlanGroup(group: StudyPlanGroup) {
+    if (!window.confirm(`"${group.title}" 계획 그룹을 삭제할까요?`)) {
+      return;
+    }
+
+    const updatedCourse = deleteStudyPlanGroup(params.courseId, group.id);
+    if (!updatedCourse) {
+      return;
+    }
+
+    setCourse(updatedCourse);
+    showFeedback("계획 그룹이 삭제되었습니다");
+  }
+
   function openSectionTitleEdit(section: Section) {
     setOpenSectionMenuId(null);
-    setSectionTitleDraft({
-      sectionId: section.id,
-      currentTitle: section.title,
-      title: section.title,
-    });
+    setSectionTitleDraft({ sectionId: section.id, currentTitle: section.title, title: section.title });
   }
 
   function saveSectionTitle() {
@@ -425,26 +458,21 @@ export default function CourseDetailPage() {
       return;
     }
 
-    setCourse((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        sections: current.sections.map((section) =>
-          section.id === updatedSection.id ? updatedSection : section,
-        ),
-      };
-    });
+    setCourse((current) =>
+      current
+        ? {
+            ...current,
+            sections: current.sections.map((section) => (section.id === updatedSection.id ? updatedSection : section)),
+          }
+        : current,
+    );
     setSectionTitleDraft(null);
     showFeedback("섹션명이 저장되었습니다");
   }
 
   function handleSectionDelete(section: Section) {
     setOpenSectionMenuId(null);
-    const confirmed = window.confirm(`"${section.title}" 섹션을 삭제할까요?\n연결된 강의도 함께 삭제됩니다.`);
-    if (!confirmed) {
+    if (!window.confirm(`"${section.title}" 섹션을 삭제할까요?\n연결된 강의도 함께 삭제됩니다.`)) {
       return;
     }
 
@@ -496,9 +524,7 @@ export default function CourseDetailPage() {
               aria-label="강의명"
             />
           ) : (
-            <h1 className="min-w-0 flex-1 truncate text-xl font-bold leading-tight text-gray-950">
-              {course.title}
-            </h1>
+            <h1 className="min-w-0 flex-1 truncate text-xl font-bold leading-tight text-gray-950">{course.title}</h1>
           )}
           <div className="relative flex shrink-0 gap-1">
             {isEditingCourseTitle ? (
@@ -517,41 +543,49 @@ export default function CourseDetailPage() {
             )}
             {!isEditingCourseTitle ? (
               <>
-                <IconButton label="강의 메뉴 열기" tone="neutral" onClick={() => setIsCourseMenuOpen((current) => !current)}>
+                <IconButton
+                  label="강의 메뉴 열기"
+                  tone="neutral"
+                  onClick={() => {
+                    setOpenLectureMenuId(null);
+                    setOpenSectionMenuId(null);
+                    setIsCourseMenuOpen((current) => {
+                      const next = !current;
+                      if (!next) {
+                        setCourseMenuGroup(null);
+                      }
+                      return next;
+                    });
+                  }}
+                >
                   <MoreHorizontal size={17} />
                 </IconButton>
                 {isCourseMenuOpen ? (
-                  <div className="absolute right-0 top-10 z-50 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
-                    <button
-                      type="button"
-                      onClick={openRoundEdit}
-                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
-                    >
-                      회독 수정
-                    </button>
-                    {isCurrentRoundCompleted ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsCourseMenuOpen(false);
-                          setIsRoundConfirmOpen(true);
-                        }}
-                        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold text-green-700 active:bg-green-50"
-                      >
-                        다음 회독 시작
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCourseMenuOpen(false);
-                        setIsRoundHistoryOpen(true);
-                      }}
-                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
-                    >
-                      회독 이력
-                    </button>
-                  </div>
+                  <CourseMoreMenu
+                    activeGroup={courseMenuGroup}
+                    isCurrentRoundCompleted={isCurrentRoundCompleted}
+                    planGroups={course.planGroups ?? []}
+                    sections={course.sections}
+                    onCreatePlanGroup={openCreatePlanGroup}
+                    onDeletePlanGroup={handleDeletePlanGroup}
+                    onEditPlanGroup={openEditPlanGroup}
+                    onOpenRoundConfirm={() => {
+                      setIsCourseMenuOpen(false);
+                      setIsRoundConfirmOpen(true);
+                    }}
+                    onOpenRoundEdit={openRoundEdit}
+                    onOpenRoundHistory={() => {
+                      setIsCourseMenuOpen(false);
+                      setIsRoundHistoryOpen(true);
+                    }}
+                    onOpenSearch={() => {
+                      setCourseMenuGroup(null);
+                      setIsCourseMenuOpen(false);
+                      setIsFilterOpen(true);
+                    }}
+                    onOpenSectionPlan={openSectionPlan}
+                    onToggleGroup={(group) => setCourseMenuGroup((current) => (current === group ? null : group))}
+                  />
                 ) : null}
               </>
             ) : null}
@@ -649,23 +683,18 @@ export default function CourseDetailPage() {
         onChangeDraft={setLectureTitleDrafts}
         onDelete={handleLectureDelete}
         onEdit={handleLectureEditStart}
+        onLectureMenuToggle={handleLectureMenuToggle}
+        onSaveTitle={handleLectureTitleSave}
+        onSectionAction={openSectionConfirm}
         onSectionDelete={handleSectionDelete}
         onSectionMenuToggle={handleSectionMenuToggle}
         onSectionTitleEdit={openSectionTitleEdit}
-        onLectureMenuToggle={handleLectureMenuToggle}
-        onPlanEdit={openSectionPlan}
-        onSaveTitle={handleLectureTitleSave}
-        onSectionAction={openSectionConfirm}
         onStatusToggle={handleLectureToggle}
         onToggleSection={toggleSection}
         visibleLectureCount={visibleLectureCount}
       />
 
-      <ConfirmModal
-        confirm={sectionConfirm}
-        onCancel={() => setSectionConfirm(null)}
-        onConfirm={applySectionConfirm}
-      />
+      <ConfirmModal confirm={sectionConfirm} onCancel={() => setSectionConfirm(null)} onConfirm={applySectionConfirm} />
       <SectionPlanModal
         draft={sectionPlanDraft}
         onCancel={() => setSectionPlanDraft(null)}
@@ -678,23 +707,21 @@ export default function CourseDetailPage() {
         onChange={setSectionTitleDraft}
         onSave={saveSectionTitle}
       />
-      <RoundEditModal
-        value={roundDraft}
-        onCancel={() => setRoundDraft(null)}
-        onChange={setRoundDraft}
-        onSave={saveRoundEdit}
+      <PlanGroupModal
+        draft={planGroupDraft}
+        sections={course.sections}
+        onCancel={() => setPlanGroupDraft(null)}
+        onChange={setPlanGroupDraft}
+        onSave={savePlanGroup}
       />
+      <RoundEditModal value={roundDraft} onCancel={() => setRoundDraft(null)} onChange={setRoundDraft} onSave={saveRoundEdit} />
       <RoundConfirmModal
         course={course}
         isOpen={isRoundConfirmOpen}
         onCancel={() => setIsRoundConfirmOpen(false)}
         onConfirm={completeRound}
       />
-      <RoundHistoryModal
-        course={course}
-        isOpen={isRoundHistoryOpen}
-        onClose={() => setIsRoundHistoryOpen(false)}
-      />
+      <RoundHistoryModal course={course} isOpen={isRoundHistoryOpen} onClose={() => setIsRoundHistoryOpen(false)} />
     </main>
   );
 }
@@ -712,7 +739,6 @@ function LectureSections({
   onDelete,
   onEdit,
   onLectureMenuToggle,
-  onPlanEdit,
   onSaveTitle,
   onSectionAction,
   onSectionDelete,
@@ -734,7 +760,6 @@ function LectureSections({
   onDelete: (lectureId: string, title: string) => void;
   onEdit: (lectureId: string) => void;
   onLectureMenuToggle: (lectureId: string) => void;
-  onPlanEdit: (section: Section) => void;
   onSaveTitle: (lectureId: string) => void;
   onSectionAction: (group: SectionGroup) => void;
   onSectionDelete: (section: Section) => void;
@@ -759,19 +784,20 @@ function LectureSections({
       {visibleLectureCount === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
           <p className="text-base font-bold text-gray-900">조건에 맞는 강의가 없습니다</p>
-          <p className="mt-2 text-sm leading-6 text-gray-500">검색어를 줄이거나 상태 필터를 변경하세요.</p>
+          <p className="mt-2 text-sm leading-6 text-gray-500">검색어를 줄이거나 상태 필터를 변경해보세요.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {groups.map((group) => {
             const isCollapsed = collapsedSections[group.section.id] ?? true;
             const isSectionMenuOpen = openSectionMenuId === group.section.id;
+            const hasOpenLectureMenu = group.visibleLectures.some((lecture) => lecture.id === openLectureMenuId);
 
             return (
               <article
                 key={group.section.id}
                 className={`relative overflow-visible rounded-2xl border border-gray-200 bg-gray-50 ${
-                  isSectionMenuOpen ? "z-40" : "z-0"
+                  isSectionMenuOpen || hasOpenLectureMenu ? "z-50" : "z-0"
                 }`}
               >
                 <div className="flex min-h-[54px] items-center gap-2 px-3 py-2">
@@ -805,13 +831,7 @@ function LectureSections({
                       tone={group.allCompleted ? "success" : group.allInProgress ? "warning" : "neutral"}
                       onClick={() => onSectionAction(group)}
                     >
-                      {group.allCompleted ? (
-                        <CheckCircle2 size={17} />
-                      ) : group.allInProgress ? (
-                        <PlayCircle size={17} />
-                      ) : (
-                        <Circle size={17} />
-                      )}
+                      {group.allCompleted ? <CheckCircle2 size={17} /> : group.allInProgress ? <PlayCircle size={17} /> : <Circle size={17} />}
                     </IconButton>
                     <IconButton label="섹션 메뉴 열기" tone="neutral" onClick={() => onSectionMenuToggle(group.section.id)}>
                       <MoreHorizontal size={17} />
@@ -819,14 +839,6 @@ function LectureSections({
                   </div>
                   {isSectionMenuOpen ? (
                     <div className="absolute right-3 top-12 z-50 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
-                      <button
-                        type="button"
-                        onClick={() => onPlanEdit(group.section)}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
-                      >
-                        <Pencil size={15} />
-                        계획 설정
-                      </button>
                       <button
                         type="button"
                         onClick={() => onSectionTitleEdit(group.section)}
@@ -907,7 +919,7 @@ function LectureRow({
     <article
       className={`relative flex min-h-[46px] items-center gap-2 border-b px-2.5 py-1.5 last:border-b-0 ${
         isCompleted ? "border-green-100 bg-green-50" : "border-gray-200 bg-gray-50"
-      } ${isMenuOpen ? "z-30" : "z-0"}`}
+      } ${isMenuOpen ? "z-[60]" : "z-0"}`}
     >
       {isEditing ? (
         <StatusIcon status={lecture.status} />
@@ -946,9 +958,7 @@ function LectureRow({
             <h3 className={`truncate text-sm font-bold ${isCompleted ? "text-green-800" : "text-gray-950"}`}>
               {lecture.title}
             </h3>
-            {isCompleted ? (
-              <p className="mt-0.5 text-xs font-bold text-green-700">{lecture.completedAt}</p>
-            ) : null}
+            {isCompleted ? <p className="mt-0.5 text-xs font-bold text-green-700">{lecture.completedAt}</p> : null}
           </>
         )}
       </div>
@@ -969,7 +979,7 @@ function LectureRow({
               <MoreHorizontal size={17} />
             </IconButton>
             {isMenuOpen ? (
-              <div className="absolute right-2 top-9 z-50 w-28 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+              <div className="absolute right-2 top-9 z-[70] w-28 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
                 <button
                   type="button"
                   onClick={() => onEdit(lecture.id)}
@@ -995,6 +1005,255 @@ function LectureRow({
   );
 }
 
+function CourseMoreMenu({
+  activeGroup,
+  isCurrentRoundCompleted,
+  planGroups,
+  sections,
+  onCreatePlanGroup,
+  onDeletePlanGroup,
+  onEditPlanGroup,
+  onOpenRoundConfirm,
+  onOpenRoundEdit,
+  onOpenRoundHistory,
+  onOpenSearch,
+  onOpenSectionPlan,
+  onToggleGroup,
+}: {
+  activeGroup: CourseMenuGroup;
+  isCurrentRoundCompleted: boolean;
+  planGroups: StudyPlanGroup[];
+  sections: Section[];
+  onCreatePlanGroup: () => void;
+  onDeletePlanGroup: (group: StudyPlanGroup) => void;
+  onEditPlanGroup: (group: StudyPlanGroup) => void;
+  onOpenRoundConfirm: () => void;
+  onOpenRoundEdit: () => void;
+  onOpenRoundHistory: () => void;
+  onOpenSearch: () => void;
+  onOpenSectionPlan: (section: Section) => void;
+  onToggleGroup: (group: Exclude<CourseMenuGroup, null>) => void;
+}) {
+  const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+  const sectionTitleMap = new Map(sections.map((section) => [section.id, section.title]));
+
+  return (
+    <div className="absolute right-0 top-10 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 bg-white p-2 shadow-xl">
+      <div className="grid grid-cols-3 gap-1">
+        <CourseMenuGroupButton active={activeGroup === "SEARCH"} onClick={() => onToggleGroup("SEARCH")}>
+          검색
+        </CourseMenuGroupButton>
+        <CourseMenuGroupButton active={activeGroup === "PLAN"} onClick={() => onToggleGroup("PLAN")}>
+          계획
+        </CourseMenuGroupButton>
+        <CourseMenuGroupButton active={activeGroup === "GROUP"} onClick={() => onToggleGroup("GROUP")}>
+          그룹
+        </CourseMenuGroupButton>
+      </div>
+
+      {activeGroup === "SEARCH" ? (
+        <div className="mt-2 rounded-xl bg-gray-50 p-2">
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            className="flex min-h-10 w-full items-center justify-between rounded-lg px-3 text-left text-sm font-bold text-gray-800 active:bg-gray-100"
+          >
+            검색/필터 열기
+            <SlidersHorizontal size={16} className="text-gray-500" />
+          </button>
+        </div>
+      ) : null}
+
+      {activeGroup === "PLAN" ? (
+        <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-xl bg-gray-50 p-2">
+          {sortedSections.map((section) => {
+            const hasPlan = section.planStartDate && section.dailyTargetCount;
+
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => onOpenSectionPlan(section)}
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-left active:bg-gray-100"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-800">{section.title}</span>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
+                    hasPlan ? "bg-blue-50 text-blue-700" : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {hasPlan ? "수정" : "설정"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {activeGroup === "GROUP" ? (
+        <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-xl bg-gray-50 p-2">
+          <button
+            type="button"
+            onClick={onCreatePlanGroup}
+            className="flex min-h-10 w-full items-center justify-center rounded-lg bg-blue-600 px-3 text-sm font-bold text-white active:bg-blue-700"
+          >
+            계획 그룹 만들기
+          </button>
+          {planGroups.length === 0 ? (
+            <p className="px-2 py-3 text-center text-xs font-bold leading-5 text-gray-500">아직 계획 그룹이 없습니다.</p>
+          ) : (
+            planGroups.map((group) => (
+              <div key={group.id} className="rounded-xl bg-white p-2">
+                <p className="truncate text-sm font-bold text-gray-900">{group.title}</p>
+                <p className="mt-0.5 line-clamp-2 text-xs font-bold leading-4 text-gray-500">
+                  {group.sectionIds.map((sectionId) => sectionTitleMap.get(sectionId)).filter(Boolean).join(", ")}
+                </p>
+                <div className="mt-2 flex justify-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onEditPlanGroup(group)}
+                    className="rounded-full px-2.5 py-1 text-xs font-bold text-blue-700 active:bg-blue-50"
+                  >
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeletePlanGroup(group)}
+                    className="rounded-full px-2.5 py-1 text-xs font-bold text-red-600 active:bg-red-50"
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+
+      <div className="mt-2 border-t border-gray-100 pt-1">
+        <button
+          type="button"
+          onClick={onOpenRoundEdit}
+          className="flex min-h-9 w-full items-center rounded-lg px-3 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+        >
+          회독 수정
+        </button>
+        {isCurrentRoundCompleted ? (
+          <button
+            type="button"
+            onClick={onOpenRoundConfirm}
+            className="flex min-h-9 w-full items-center rounded-lg px-3 text-left text-sm font-bold text-green-700 active:bg-green-50"
+          >
+            다음 회독 시작
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onOpenRoundHistory}
+          className="flex min-h-9 w-full items-center rounded-lg px-3 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+        >
+          회독 이력
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CourseMenuGroupButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-9 rounded-xl text-xs font-bold ${
+        active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 active:bg-gray-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PlanGroupModal({
+  draft,
+  sections,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  draft: PlanGroupDraft;
+  sections: Section[];
+  onCancel: () => void;
+  onChange: Dispatch<SetStateAction<PlanGroupDraft>>;
+  onSave: () => void;
+}) {
+  if (!draft) {
+    return null;
+  }
+
+  function toggleSection(sectionId: string) {
+    onChange((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sectionIds: current.sectionIds.includes(sectionId)
+          ? current.sectionIds.filter((item) => item !== sectionId)
+          : [...current.sectionIds, sectionId],
+      };
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))]">
+      <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-screen-sm flex-col rounded-2xl bg-white shadow-xl">
+        <div className="shrink-0 px-4 pt-4">
+          <h2 className="text-lg font-bold text-gray-950">{draft.id ? "계획 그룹 수정" : "계획 그룹 만들기"}</h2>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          <div className="space-y-3">
+            <label className="block">
+              <span className="text-sm font-bold text-gray-800">그룹 이름</span>
+              <input
+                value={draft.title}
+                onChange={(event) => onChange((current) => (current ? { ...current, title: event.target.value } : current))}
+                className="mt-1 box-border min-h-10 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+            </label>
+            <div>
+              <p className="text-sm font-bold text-gray-800">포함할 Section</p>
+              <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2">
+                {sections.map((section) => (
+                  <label key={section.id} className="flex min-h-9 items-center gap-2 rounded-lg bg-white px-2">
+                    <input
+                      type="checkbox"
+                      checked={draft.sectionIds.includes(section.id)}
+                      onChange={() => toggleSection(section.id)}
+                      className="h-4 w-4 accent-blue-600"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-gray-700">{section.title}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <PlanFields draft={draft} onChange={onChange} />
+          </div>
+        </div>
+        <ModalActions onCancel={onCancel} onSave={onSave} />
+      </div>
+    </div>
+  );
+}
+
 function SectionPlanModal({
   draft,
   onCancel,
@@ -1014,72 +1273,59 @@ function SectionPlanModal({
     <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))]">
       <div className="flex max-h-[calc(100dvh-24px)] w-full max-w-screen-sm flex-col rounded-2xl bg-white shadow-xl">
         <div className="shrink-0 px-4 pt-4">
-          <h2 className="text-lg font-bold text-gray-950">계획 수정</h2>
+          <h2 className="text-lg font-bold text-gray-950">계획 설정</h2>
           <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.sectionTitle}</p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           <div className="space-y-2.5">
-            <label className="block">
-              <span className="text-sm font-bold text-gray-800">시작 날짜</span>
-              <input
-                type="date"
-                value={draft.planStartDate}
-                onChange={(event) =>
-                  onChange((current) =>
-                    current ? { ...current, planStartDate: event.target.value } : current,
-                  )
-                }
-                className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-bold text-gray-800">종료 날짜</span>
-              <input
-                type="date"
-                value={draft.planEndDate}
-                onChange={(event) =>
-                  onChange((current) =>
-                    current ? { ...current, planEndDate: event.target.value } : current,
-                  )
-                }
-                className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-bold text-gray-800">하루 목표 강의 수</span>
-              <input
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={draft.dailyTargetCount}
-                onChange={(event) =>
-                  onChange((current) =>
-                    current ? { ...current, dailyTargetCount: event.target.value } : current,
-                  )
-                }
-                className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-              />
-            </label>
+            <PlanFields draft={draft} onChange={onChange} />
           </div>
         </div>
-        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-gray-100 px-4 pb-4 pt-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
-          >
-            저장
-          </button>
-        </div>
+        <ModalActions onCancel={onCancel} onSave={onSave} />
       </div>
     </div>
+  );
+}
+
+function PlanFields<T extends SectionPlanDraft | PlanGroupDraft>({
+  draft,
+  onChange,
+}: {
+  draft: NonNullable<T>;
+  onChange: Dispatch<SetStateAction<T>>;
+}) {
+  return (
+    <>
+      <label className="block">
+        <span className="text-sm font-bold text-gray-800">시작 날짜</span>
+        <input
+          type="date"
+          value={draft.planStartDate}
+          onChange={(event) => onChange((current) => (current ? { ...current, planStartDate: event.target.value } : current))}
+          className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        />
+      </label>
+      <label className="block">
+        <span className="text-sm font-bold text-gray-800">종료 날짜</span>
+        <input
+          type="date"
+          value={draft.planEndDate}
+          onChange={(event) => onChange((current) => (current ? { ...current, planEndDate: event.target.value } : current))}
+          className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        />
+      </label>
+      <label className="block">
+        <span className="text-sm font-bold text-gray-800">하루 목표 강의 수</span>
+        <input
+          type="number"
+          min="1"
+          inputMode="numeric"
+          value={draft.dailyTargetCount}
+          onChange={(event) => onChange((current) => (current ? { ...current, dailyTargetCount: event.target.value } : current))}
+          className="mt-1 box-border min-h-10 w-full min-w-0 appearance-none rounded-xl border border-gray-200 bg-white px-2.5 text-sm text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        />
+      </label>
+    </>
   );
 }
 
@@ -1107,28 +1353,11 @@ function SectionTitleModal({
           <span className="text-sm font-bold text-gray-800">섹션명</span>
           <input
             value={draft.title}
-            onChange={(event) =>
-              onChange((current) => (current ? { ...current, title: event.target.value } : current))
-            }
+            onChange={(event) => onChange((current) => (current ? { ...current, title: event.target.value } : current))}
             className="mt-1 box-border min-h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </label>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
-          >
-            저장
-          </button>
-        </div>
+        <ModalActions onCancel={onCancel} onSave={onSave} />
       </div>
     </div>
   );
@@ -1164,22 +1393,7 @@ function RoundEditModal({
             className="mt-1 box-border min-h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
         </label>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
-          >
-            저장
-          </button>
-        </div>
+        <ModalActions onCancel={onCancel} onSave={onSave} />
       </div>
     </div>
   );
@@ -1209,22 +1423,7 @@ function RoundConfirmModal({
         <p className="mt-2 text-sm leading-6 text-gray-600">
           {currentRound}회독을 완료 처리하고 {currentRound + 1}회독을 시작할까요?
         </p>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-12 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="min-h-12 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
-          >
-            확인
-          </button>
-        </div>
+        <ModalActions confirmLabel="확인" onCancel={onCancel} onSave={onConfirm} />
       </div>
     </div>
   );
@@ -1291,23 +1490,37 @@ function ConfirmModal({
         <h2 className="text-lg font-bold text-gray-950">섹션 상태 변경</h2>
         <p className="mt-2 text-sm leading-6 text-gray-600">{confirm.message}</p>
         <p className="mt-1 text-xs font-bold text-gray-400">{confirm.group.section.title}</p>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-12 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="min-h-12 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
-          >
-            확인
-          </button>
-        </div>
+        <ModalActions confirmLabel="확인" onCancel={onCancel} onSave={onConfirm} />
       </div>
+    </div>
+  );
+}
+
+function ModalActions({
+  confirmLabel = "저장",
+  onCancel,
+  onSave,
+}: {
+  confirmLabel?: string;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="mt-5 grid shrink-0 grid-cols-2 gap-2 border-t border-gray-100 pt-3">
+      <button
+        type="button"
+        onClick={onCancel}
+        className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+      >
+        취소
+      </button>
+      <button
+        type="button"
+        onClick={onSave}
+        className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+      >
+        {confirmLabel}
+      </button>
     </div>
   );
 }
@@ -1341,20 +1554,17 @@ function IconButton({
     danger: "border-red-100 bg-white text-red-600 active:bg-red-50",
     neutral: "border-gray-200 bg-white text-gray-600 active:bg-gray-100",
     primary: "border-blue-600 bg-blue-600 text-white active:bg-blue-700",
-    success: active
-      ? "border-green-500 bg-green-500 text-white"
-      : "border-green-100 bg-white text-green-600 active:bg-green-50",
-    warning: active
-      ? "border-yellow-500 bg-yellow-500 text-white"
-      : "border-yellow-100 bg-white text-yellow-700 active:bg-yellow-50",
+    success: active ? "border-green-500 bg-green-500 text-white" : "border-green-100 bg-white text-green-600 active:bg-green-50",
+    warning: active ? "border-yellow-500 bg-yellow-500 text-white" : "border-yellow-100 bg-white text-yellow-700 active:bg-yellow-50",
   }[tone];
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-9 w-9 items-center justify-center rounded-full border ${toneClass}`}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${toneClass}`}
       aria-label={label}
+      title={label}
     >
       {children}
     </button>

@@ -33,7 +33,19 @@ export type Lecture = {
   createdAt: string;
 };
 
+export type StudyPlanGroup = {
+  id: string;
+  courseId: string;
+  title: string;
+  sectionIds: string[];
+  planStartDate?: string;
+  planEndDate?: string;
+  dailyTargetCount?: number;
+  createdAt: string;
+};
+
 export type CourseWithLectures = Course & {
   sections: Section[];
   lectures: Lecture[];
+  planGroups?: StudyPlanGroup[];
 };

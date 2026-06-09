@@ -62,7 +62,7 @@ function isValidBackup(value: unknown): value is StoredCourse[] {
   );
 }
 
-function normalizeCourse(course: StoredCourse): CourseWithLectures {
+function normalizeCourse(course: StoredCourse, courseIndex = 0): CourseWithLectures {
   const defaultSection = createDefaultSection(course.id, course.createdAt);
   const sections =
     Array.isArray(course.sections) && course.sections.length > 0
@@ -95,6 +95,7 @@ function normalizeCourse(course: StoredCourse): CourseWithLectures {
     id: course.id,
     title: course.title,
     createdAt: course.createdAt,
+    order: typeof course.order === "number" ? course.order : courseIndex,
     sections,
     lectures,
   };
@@ -116,7 +117,7 @@ function readCourses(): CourseWithLectures[] {
       return [];
     }
 
-    const normalized = parsed.map(normalizeCourse);
+    const normalized = parsed.map((course, index) => normalizeCourse(course, index));
     if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
       writeCourses(normalized);
     }
@@ -190,7 +191,7 @@ function parseCourseLines(courseId: string, lines: string[], createdAt: string) 
 }
 
 export function getCourses(): CourseWithLectures[] {
-  return readCourses().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return readCourses().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 export function exportCourses(): CourseWithLectures[] {
@@ -202,7 +203,7 @@ export function importCourses(value: unknown): CourseWithLectures[] {
     throw new Error("Lecture Tracker 백업 JSON 파일이 아닙니다.");
   }
 
-  const normalized = value.map(normalizeCourse);
+  const normalized = value.map((course, index) => normalizeCourse(course, index));
   writeCourses(normalized);
   return getCourses();
 }
@@ -213,7 +214,21 @@ export function getCourse(courseId: string): CourseWithLectures | null {
 
 export function deleteCourse(courseId: string) {
   const courses = readCourses();
-  writeCourses(courses.filter((course) => course.id !== courseId));
+  writeCourses(courses.filter((course) => course.id !== courseId).map((course, index) => ({ ...course, order: index })));
+}
+
+export function updateCourseOrder(courseIds: string[]): CourseWithLectures[] {
+  const orderMap = new Map(courseIds.map((courseId, index) => [courseId, index]));
+  const nextCourses = readCourses()
+    .map((course) => ({
+      ...course,
+      order: orderMap.get(course.id) ?? course.order ?? courseIds.length,
+    }))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((course, index) => ({ ...course, order: index }));
+
+  writeCourses(nextCourses);
+  return getCourses();
 }
 
 export function updateCourseTitle(courseId: string, title: string): CourseWithLectures | null {
@@ -349,12 +364,13 @@ export function createCourse(title: string, lines: string[]): Course {
     id: courseId,
     title,
     createdAt: now,
+    order: 0,
     sections,
     lectures,
   };
 
   const courses = readCourses();
-  writeCourses([course, ...courses]);
+  writeCourses([course, ...courses.map((item) => ({ ...item, order: (item.order ?? 0) + 1 }))]);
 
   return course;
 }

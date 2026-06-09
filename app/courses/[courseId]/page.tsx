@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -9,6 +10,7 @@ import {
   MoreHorizontal,
   Pencil,
   PlayCircle,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -77,6 +79,7 @@ export default function CourseDetailPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [courseTitleDraft, setCourseTitleDraft] = useState("");
   const [lectureTitleDrafts, setLectureTitleDrafts] = useState<Record<string, string>>({});
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
@@ -431,21 +434,25 @@ export default function CourseDetailPage() {
         </div>
       ) : null}
 
-      <header className="mb-5">
-        <Link href="/" className="text-sm font-bold text-gray-600 active:text-gray-950">
-          돌아가기
+      <header className="mb-3">
+        <Link
+          href="/"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-700 active:bg-gray-100"
+          aria-label="돌아가기"
+        >
+          <ArrowLeft size={18} />
         </Link>
-        <div className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+        <div className="mt-2 rounded-2xl border border-gray-200 bg-gray-50 p-3">
           <div className="flex items-start gap-2">
             {isEditingCourseTitle ? (
               <input
                 value={courseTitleDraft}
                 onChange={(event) => setCourseTitleDraft(event.target.value)}
-                className="min-h-11 min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-xl font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                className="min-h-10 min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-lg font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 aria-label="강의명"
               />
             ) : (
-              <h1 className="min-w-0 flex-1 break-words text-2xl font-bold leading-tight text-gray-950">
+              <h1 className="min-w-0 flex-1 break-words text-xl font-bold leading-tight text-gray-950">
                 {course.title}
               </h1>
             )}
@@ -469,15 +476,15 @@ export default function CourseDetailPage() {
         </div>
       </header>
 
-      <section className="grid grid-cols-3 gap-2">
-        <StatCard label="전체" value={String(stats.totalCount)} />
-        <StatCard label="완료" value={String(stats.completedCount)} />
-        <StatCard label="진도율" value={`${stats.progressRate}%`} />
-      </section>
-
-      <section className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
+      <section className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm font-bold text-gray-700">전체 진도</p>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="text-sm font-bold text-gray-700">전체 진도</p>
+            <span className="text-xs font-bold text-gray-400">·</span>
+            <p className="text-xs font-bold text-gray-500">
+              {stats.completedCount}/{stats.totalCount}
+            </p>
+          </div>
           <p className="text-sm font-bold text-blue-700">{stats.progressRate}%</p>
         </div>
         <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-gray-200">
@@ -485,47 +492,70 @@ export default function CourseDetailPage() {
         </div>
       </section>
 
-      <section className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
-        <label className="block">
-          <span className="text-sm font-bold text-gray-900">강의명 또는 섹션명 검색</span>
+      <section className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
+        <div className="flex items-center gap-2">
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="예: 법인세, OT, 1과목"
-            className="mt-2 min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            placeholder="강의명 또는 섹션명 검색"
+            className="min-h-10 min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           />
-        </label>
-
-        <div className="mt-3 grid grid-cols-4 gap-1.5">
-          {filterOptions.map((option) => {
-            const isActive = statusFilter === option.value;
-
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setStatusFilter(option.value)}
-                className={`min-h-9 rounded-full border px-2 text-xs font-bold ${
-                  isActive
-                    ? "border-blue-600 bg-blue-600 text-white"
-                    : "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen((current) => !current)}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${
+              isFilterOpen || statusFilter !== "ALL" || hideCompleted
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-gray-200 bg-white text-gray-600 active:bg-gray-100"
+            }`}
+            aria-label="필터"
+          >
+            <SlidersHorizontal size={17} />
+          </button>
         </div>
 
-        <label className="mt-3 flex min-h-10 items-center justify-between gap-3 rounded-xl bg-white px-3">
-          <span className="text-sm font-bold text-gray-800">완료 강의 숨기기</span>
-          <input
-            type="checkbox"
-            checked={hideCompleted}
-            onChange={(event) => setHideCompleted(event.target.checked)}
-            className="h-5 w-5 accent-blue-600"
-          />
-        </label>
+        {statusFilter !== "ALL" || hideCompleted ? (
+          <p className="mt-2 truncate px-1 text-xs font-bold text-blue-700">
+            {[hideCompleted ? "완강 숨김" : null, statusFilter !== "ALL" ? statusOptions.find((option) => option.value === statusFilter)?.label : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        ) : null}
+
+        {isFilterOpen ? (
+          <div className="mt-2 rounded-xl bg-white p-2">
+            <div className="grid grid-cols-4 gap-1.5">
+              {filterOptions.map((option) => {
+                const isActive = statusFilter === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setStatusFilter(option.value)}
+                    className={`min-h-8 rounded-full border px-2 text-xs font-bold ${
+                      isActive
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <label className="mt-2 flex min-h-9 items-center justify-between gap-3 rounded-xl bg-gray-50 px-3">
+              <span className="text-sm font-bold text-gray-800">완료 강의 숨기기</span>
+              <input
+                type="checkbox"
+                checked={hideCompleted}
+                onChange={(event) => setHideCompleted(event.target.checked)}
+                className="h-5 w-5 accent-blue-600"
+              />
+            </label>
+          </div>
+        ) : null}
       </section>
 
       <LectureSections
@@ -640,20 +670,20 @@ function LectureSections({
                   isSectionMenuOpen ? "z-40" : "z-0"
                 }`}
               >
-                <div className="flex items-center gap-2 px-3 py-2.5">
+                <div className="flex min-h-[54px] items-center gap-2 px-3 py-2">
                   <button
                     type="button"
                     onClick={() => onToggleSection(group.section.id)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left active:opacity-70"
+                    className="flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left active:opacity-70"
                   >
                     {isCollapsed ? (
                       <ChevronRight className="h-4 w-4 shrink-0 text-gray-500" />
                     ) : (
                       <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" />
                     )}
-                    <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-1 flex-col justify-center">
                       <h3 className="truncate text-sm font-bold text-gray-950">{group.section.title}</h3>
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-0.5 flex items-center gap-2">
                         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-200">
                           <div className="h-full rounded-full bg-blue-500" style={{ width: `${group.progressRate}%` }} />
                         </div>
@@ -664,23 +694,25 @@ function LectureSections({
                       {group.completedCount}/{group.lectures.length}
                     </span>
                   </button>
-                  <IconButton
-                    active={group.allInProgress || group.allCompleted}
-                    label="섹션 상태 변경"
-                    tone={group.allCompleted ? "success" : group.allInProgress ? "warning" : "neutral"}
-                    onClick={() => onSectionAction(group)}
-                  >
-                    {group.allCompleted ? (
-                      <CheckCircle2 size={17} />
-                    ) : group.allInProgress ? (
-                      <PlayCircle size={17} />
-                    ) : (
-                      <Circle size={17} />
-                    )}
-                  </IconButton>
-                  <IconButton label="섹션 메뉴 열기" tone="neutral" onClick={() => onSectionMenuToggle(group.section.id)}>
-                    <MoreHorizontal size={17} />
-                  </IconButton>
+                  <div className="flex min-h-10 shrink-0 items-center gap-1">
+                    <IconButton
+                      active={group.allInProgress || group.allCompleted}
+                      label="섹션 상태 변경"
+                      tone={group.allCompleted ? "success" : group.allInProgress ? "warning" : "neutral"}
+                      onClick={() => onSectionAction(group)}
+                    >
+                      {group.allCompleted ? (
+                        <CheckCircle2 size={17} />
+                      ) : group.allInProgress ? (
+                        <PlayCircle size={17} />
+                      ) : (
+                        <Circle size={17} />
+                      )}
+                    </IconButton>
+                    <IconButton label="섹션 메뉴 열기" tone="neutral" onClick={() => onSectionMenuToggle(group.section.id)}>
+                      <MoreHorizontal size={17} />
+                    </IconButton>
+                  </div>
                   {isSectionMenuOpen ? (
                     <div className="absolute right-3 top-12 z-50 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
                       <button
@@ -1048,15 +1080,6 @@ function StatusIcon({ status }: { status: LectureStatus }) {
   }
 
   return <Circle className="h-5 w-5 shrink-0" aria-label="미수강" />;
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
-      <p className="text-xs font-bold leading-4 text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-950">{value}</p>
-    </div>
-  );
 }
 
 function IconButton({

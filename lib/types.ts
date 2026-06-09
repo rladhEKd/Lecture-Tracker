@@ -4,6 +4,7 @@ export type Course = {
   id: string;
   title: string;
   createdAt: string;
+  order?: number;
 };
 
 export type Section = {

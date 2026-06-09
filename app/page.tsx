@@ -1,8 +1,24 @@
 "use client";
 
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { ArrowUpDown } from "lucide-react";
 import Link from "next/link";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { deleteCourse, exportCourses, getCourses, importCourses } from "@/lib/storage";
+import { deleteCourse, exportCourses, getCourses, importCourses, updateCourseOrder } from "@/lib/storage";
 import type { CourseWithLectures } from "@/lib/types";
 
 function getProgress(course: CourseWithLectures) {
@@ -90,6 +106,8 @@ export default function Home() {
   const [courses, setCourses] = useState<CourseWithLectures[]>([]);
   const [message, setMessage] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSortMode, setIsSortMode] = useState(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
     setCourses(getCourses());
@@ -103,6 +121,25 @@ export default function Home() {
 
     deleteCourse(courseId);
     setCourses(getCourses());
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    setCourses((current) => {
+      const oldIndex = current.findIndex((course) => course.id === active.id);
+      const newIndex = current.findIndex((course) => course.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) {
+        return current;
+      }
+
+      const nextCourses = arrayMove(current, oldIndex, newIndex);
+      updateCourseOrder(nextCourses.map((course) => course.id));
+      return nextCourses.map((course, index) => ({ ...course, order: index }));
+    });
   }
 
   function handleBackup() {
@@ -203,6 +240,18 @@ export default function Home() {
             >
               + 강의 추가
             </Link>
+            <button
+              type="button"
+              onClick={() => setIsSortMode((current) => !current)}
+              className={`flex h-9 w-9 items-center justify-center rounded-full border ${
+                isSortMode
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : "border-gray-200 bg-white text-gray-700 active:bg-gray-50"
+              }`}
+              aria-label="강의 순서 정렬"
+            >
+              <ArrowUpDown size={17} />
+            </button>
           </div>
         </div>
 
@@ -214,53 +263,110 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {courses.map((course) => {
-              const progress = getProgress(course);
-              const planSummaries = getSectionPlanSummaries(course);
-
-              return (
-                <article key={course.id} className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <Link href={`/courses/${course.id}`} className="min-w-0 flex-1 active:opacity-80">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
-                          <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
-                          {progress}%
-                        </span>
-                      </div>
-                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200">
-                        <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
-                      </div>
-                      {planSummaries.length > 0 ? (
-                        <div className="mt-3 space-y-1">
-                          {planSummaries.map((summary) => (
-                            <p key={summary} className="truncate text-xs font-bold text-gray-600">
-                              {summary}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCourse(course.id, course.title)}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-100 bg-white text-red-600 active:bg-red-50"
-                      aria-label={`${course.title} 삭제`}
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={courses.map((course) => course.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-3">
+                {courses.map((course) => (
+                  <SortableCourseCard
+                    key={course.id}
+                    course={course}
+                    isSortMode={isSortMode}
+                    onDelete={handleDeleteCourse}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </section>
     </main>
+  );
+}
+
+function SortableCourseCard({
+  course,
+  isSortMode,
+  onDelete,
+}: {
+  course: CourseWithLectures;
+  isSortMode: boolean;
+  onDelete: (courseId: string, title: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: course.id,
+    disabled: !isSortMode,
+  });
+  const progress = getProgress(course);
+  const planSummaries = getSectionPlanSummaries(course);
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
+          <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
+          {progress}%
+        </span>
+      </div>
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-200">
+        <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
+      </div>
+      {planSummaries.length > 0 ? (
+        <div className="mt-3 space-y-1">
+          {planSummaries.map((summary) => (
+            <p key={summary} className="truncate text-xs font-bold text-gray-600">
+              {summary}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-2xl border border-gray-200 bg-gray-50 p-4 ${
+        isDragging ? "relative z-20 shadow-lg" : ""
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {isSortMode ? (
+          <div className="min-w-0 flex-1">{content}</div>
+        ) : (
+          <Link href={`/courses/${course.id}`} className="min-w-0 flex-1 active:opacity-80">
+            {content}
+          </Link>
+        )}
+        <div className="flex shrink-0 flex-col gap-2">
+          {isSortMode ? (
+            <button
+              type="button"
+              className="flex h-11 w-11 touch-none items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 active:bg-gray-100"
+              aria-label={`${course.title} 순서 이동`}
+              {...attributes}
+              {...listeners}
+            >
+              <DragHandleIcon />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onDelete(course.id, course.title)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-red-100 bg-white text-red-600 active:bg-red-50"
+            aria-label={`${course.title} 삭제`}
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -273,6 +379,14 @@ function GearIcon() {
         d="M10.3 4.4 11 2h2l.7 2.4 1.9.8 2.2-1.2 1.4 1.4-1.2 2.2.8 1.9 2.2.7v2l-2.2.7-.8 1.9 1.2 2.2-1.4 1.4-2.2-1.2-1.9.8L13 22h-2l-.7-2.4-1.9-.8-2.2 1.2-1.4-1.4 1.2-2.2-.8-1.9L3 13.8v-2l2.2-.7.8-1.9-1.2-2.2 1.4-1.4 2.2 1.2 1.9-.8Z"
       />
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+    </svg>
+  );
+}
+
+function DragHandleIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" />
     </svg>
   );
 }

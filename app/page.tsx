@@ -72,22 +72,17 @@ function getSectionPlanSummaries(course: CourseWithLectures) {
           : hasEnded
             ? totalCount
             : getDateDiffDays(section.planStartDate, today) + 1;
-      const previousElapsedDays = Math.max(0, elapsedDays - 1);
       const requiredCount =
         hasEnded
           ? totalCount
           : Math.min(totalCount, Math.max(0, elapsedDays) * section.dailyTargetCount);
-      const previousRequiredCount = hasEnded
-        ? totalCount
-        : Math.min(totalCount, previousElapsedDays * section.dailyTargetCount);
-      const overdueCount = Math.max(0, previousRequiredCount - completedCount);
-      const neededCount = Math.max(0, requiredCount - Math.max(completedCount, previousRequiredCount));
-      const status = overdueCount > 0 ? "overdue" : neededCount > 0 ? "needed" : "onTrack";
+      const overdueCount = Math.max(0, requiredCount - completedCount);
+      const status = overdueCount > 0 ? "overdue" : "onTrack";
 
       return {
         sectionTitle: section.title,
         overdueCount,
-        neededCount,
+        neededCount: 0,
         status,
       };
     })

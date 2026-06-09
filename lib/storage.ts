@@ -96,6 +96,13 @@ function normalizeCourse(course: StoredCourse, courseIndex = 0): CourseWithLectu
     title: course.title,
     createdAt: course.createdAt,
     order: typeof course.order === "number" ? course.order : courseIndex,
+    currentRound:
+      typeof course.currentRound === "number" && course.currentRound > 0 ? Math.floor(course.currentRound) : 1,
+    completedRounds: Array.isArray(course.completedRounds)
+      ? course.completedRounds
+          .filter((round) => typeof round.round === "number" && typeof round.completedAt === "string")
+          .map((round) => ({ round: Math.floor(round.round), completedAt: round.completedAt }))
+      : [],
     sections,
     lectures,
   };
@@ -257,6 +264,66 @@ export function updateCourseTitle(courseId: string, title: string): CourseWithLe
   return updatedCourse;
 }
 
+export function updateCourseRound(courseId: string, round: number): CourseWithLectures | null {
+  if (!Number.isFinite(round) || round < 1) {
+    return null;
+  }
+
+  const courses = readCourses();
+  let updatedCourse: CourseWithLectures | null = null;
+  const nextRound = Math.floor(round);
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    updatedCourse = {
+      ...course,
+      currentRound: nextRound,
+    };
+
+    return updatedCourse;
+  });
+
+  writeCourses(nextCourses);
+  return updatedCourse;
+}
+
+export function completeCourseRound(courseId: string): CourseWithLectures | null {
+  const courses = readCourses();
+  let updatedCourse: CourseWithLectures | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    const currentRound = course.currentRound ?? 1;
+    updatedCourse = {
+      ...course,
+      currentRound: currentRound + 1,
+      completedRounds: [
+        ...(course.completedRounds ?? []),
+        {
+          round: currentRound,
+          completedAt: getKoreaDateString(),
+        },
+      ],
+      lectures: course.lectures.map((lecture) => ({
+        ...lecture,
+        status: "NOT_STARTED",
+        completedAt: null,
+      })),
+    };
+
+    return updatedCourse;
+  });
+
+  writeCourses(nextCourses);
+  return updatedCourse;
+}
+
 export function updateSectionPlan(
   courseId: string,
   sectionId: string,
@@ -365,6 +432,8 @@ export function createCourse(title: string, lines: string[]): Course {
     title,
     createdAt: now,
     order: 0,
+    currentRound: 1,
+    completedRounds: [],
     sections,
     lectures,
   };

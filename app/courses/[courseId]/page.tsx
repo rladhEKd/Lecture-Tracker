@@ -19,10 +19,12 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
+  completeCourseRound,
   deleteSection,
   deleteLecture,
   getCourse,
   updateCourseTitle,
+  updateCourseRound,
   updateLectureStatus,
   updateLectureTitle,
   updateSectionPlan,
@@ -90,6 +92,8 @@ export default function CourseDetailPage() {
   const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
   const [sectionPlanDraft, setSectionPlanDraft] = useState<SectionPlanDraft>(null);
   const [sectionTitleDraft, setSectionTitleDraft] = useState<SectionTitleDraft>(null);
+  const [roundDraft, setRoundDraft] = useState<string | null>(null);
+  const [isRoundConfirmOpen, setIsRoundConfirmOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -119,6 +123,7 @@ export default function CourseDetailPage() {
 
     return { totalCount, completedCount, progressRate };
   }, [course]);
+  const isCurrentRoundCompleted = stats.totalCount > 0 && stats.completedCount === stats.totalCount;
 
   const sectionGroups = useMemo(() => {
     if (!course) {
@@ -190,6 +195,43 @@ export default function CourseDetailPage() {
   function handleCourseTitleCancel() {
     setCourseTitleDraft(course?.title ?? "");
     setIsEditingCourseTitle(false);
+  }
+
+  function openRoundEdit() {
+    setRoundDraft(String(course?.currentRound ?? 1));
+  }
+
+  function saveRoundEdit() {
+    if (roundDraft === null) {
+      return;
+    }
+
+    const updatedCourse = updateCourseRound(params.courseId, Number(roundDraft));
+    if (!updatedCourse) {
+      setRoundDraft(null);
+      return;
+    }
+
+    setCourse(updatedCourse);
+    setRoundDraft(null);
+    showFeedback("회독이 저장되었습니다");
+  }
+
+  function completeRound() {
+    const updatedCourse = completeCourseRound(params.courseId);
+    if (!updatedCourse) {
+      setIsRoundConfirmOpen(false);
+      return;
+    }
+
+    setCourse(updatedCourse);
+    setLectureTitleDrafts(
+      Object.fromEntries(updatedCourse.lectures.map((lecture) => [lecture.id, lecture.title])),
+    );
+    setIsRoundConfirmOpen(false);
+    setStatusFilter("ALL");
+    setHideCompleted(false);
+    showFeedback("새 회독을 시작했습니다");
   }
 
   function handleLectureTitleSave(lectureId: string) {
@@ -473,6 +515,25 @@ export default function CourseDetailPage() {
           </div>
         </div>
 
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={openRoundEdit}
+            className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-bold text-blue-700 active:bg-blue-100"
+          >
+            현재 {course.currentRound ?? 1}회독
+          </button>
+          {isCurrentRoundCompleted ? (
+            <button
+              type="button"
+              onClick={() => setIsRoundConfirmOpen(true)}
+              className="rounded-full bg-green-600 px-3 py-1.5 text-sm font-bold text-white active:bg-green-700"
+            >
+              이번 회독 완료
+            </button>
+          ) : null}
+        </div>
+
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-1.5">
             <p className="text-sm font-bold text-gray-700">전체 진도</p>
@@ -591,6 +652,18 @@ export default function CourseDetailPage() {
         onCancel={() => setSectionTitleDraft(null)}
         onChange={setSectionTitleDraft}
         onSave={saveSectionTitle}
+      />
+      <RoundEditModal
+        value={roundDraft}
+        onCancel={() => setRoundDraft(null)}
+        onChange={setRoundDraft}
+        onSave={saveRoundEdit}
+      />
+      <RoundConfirmModal
+        course={course}
+        isOpen={isRoundConfirmOpen}
+        onCancel={() => setIsRoundConfirmOpen(false)}
+        onConfirm={completeRound}
       />
     </main>
   );
@@ -1017,6 +1090,102 @@ function SectionTitleModal({
             className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
           >
             저장
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoundEditModal({
+  value,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  value: string | null;
+  onCancel: () => void;
+  onChange: Dispatch<SetStateAction<string | null>>;
+  onSave: () => void;
+}) {
+  if (value === null) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))]">
+      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="text-lg font-bold text-gray-950">현재 회독 수정</h2>
+        <label className="mt-4 block">
+          <span className="text-sm font-bold text-gray-800">회독</span>
+          <input
+            type="number"
+            min="1"
+            inputMode="numeric"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            className="mt-1 box-border min-h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+          />
+        </label>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoundConfirmModal({
+  course,
+  isOpen,
+  onCancel,
+  onConfirm,
+}: {
+  course: CourseWithLectures;
+  isOpen: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!isOpen) {
+    return null;
+  }
+
+  const currentRound = course.currentRound ?? 1;
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-4 pb-6 pt-20">
+      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-5 shadow-xl">
+        <h2 className="text-lg font-bold text-gray-950">이번 회독 완료</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-600">
+          {currentRound}회독을 완료 처리하고 {currentRound + 1}회독을 시작할까요?
+        </p>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-12 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="min-h-12 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+          >
+            확인
           </button>
         </div>
       </div>

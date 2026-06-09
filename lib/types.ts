@@ -5,6 +5,11 @@ export type Course = {
   title: string;
   createdAt: string;
   order?: number;
+  currentRound?: number;
+  completedRounds?: Array<{
+    round: number;
+    completedAt: string;
+  }>;
 };
 
 export type Section = {

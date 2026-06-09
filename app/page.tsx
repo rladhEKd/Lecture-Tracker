@@ -307,7 +307,9 @@ function SortableCourseCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="break-words text-base font-bold leading-6 text-gray-950">{course.title}</h3>
-          <p className="mt-1 text-sm text-gray-500">전체 {course.lectures.length}강</p>
+          <p className="mt-1 text-sm text-gray-500">
+            전체 {course.lectures.length}강 · 현재 {course.currentRound ?? 1}회독
+          </p>
         </div>
         <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-700">
           {progress}%
@@ -324,6 +326,11 @@ function SortableCourseCard({
             </p>
           ))}
         </div>
+      ) : null}
+      {course.completedRounds && course.completedRounds.length > 0 ? (
+        <p className="mt-2 truncate text-xs font-bold text-green-700">
+          {course.completedRounds.at(-1)?.round}회독 완료 {course.completedRounds.at(-1)?.completedAt}
+        </p>
       ) : null}
     </>
   );

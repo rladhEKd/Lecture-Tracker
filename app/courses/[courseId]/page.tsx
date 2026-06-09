@@ -956,17 +956,17 @@ function CourseMoreMenu({
       </div>
 
       {activeGroup === "SEARCH" ? (
-        <div className="mt-2 space-y-2 rounded-xl bg-gray-50 p-2">
-          <div className="flex items-center gap-2 rounded-lg bg-white px-3">
-            <SlidersHorizontal size={16} className="shrink-0 text-gray-500" />
+        <div className="mt-1.5 space-y-1.5 rounded-xl bg-gray-50 p-1.5">
+          <div className="flex items-center gap-1.5 rounded-lg bg-white px-2.5">
+            <SlidersHorizontal size={14} className="shrink-0 text-gray-500" />
             <input
               value={searchTerm}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder="강의명 또는 섹션명 검색"
-              className="min-h-10 min-w-0 flex-1 bg-transparent text-sm text-gray-950 outline-none"
+              className="min-h-8 min-w-0 flex-1 bg-transparent text-xs text-gray-950 outline-none placeholder:text-xs"
             />
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             {filterOptions.map((option) => {
               const isActive = statusFilter === option.value;
 
@@ -975,7 +975,7 @@ function CourseMoreMenu({
                   key={option.value}
                   type="button"
                   onClick={() => onStatusFilterChange(option.value)}
-                  className={`min-h-8 rounded-full border px-2 text-xs font-bold ${
+                  className={`min-h-7 whitespace-nowrap rounded-full border px-1.5 text-[11px] font-bold leading-none ${
                     isActive
                       ? "border-blue-600 bg-blue-600 text-white"
                       : "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
@@ -986,13 +986,13 @@ function CourseMoreMenu({
               );
             })}
           </div>
-          <label className="flex min-h-9 items-center justify-between gap-3 rounded-lg bg-white px-3">
-            <span className="text-sm font-bold text-gray-800">완료 강의 숨기기</span>
+          <label className="flex min-h-8 items-center justify-between gap-2 rounded-lg bg-white px-2.5">
+            <span className="text-xs font-bold text-gray-800">완료 강의 숨기기</span>
             <input
               type="checkbox"
               checked={hideCompleted}
               onChange={(event) => onHideCompletedChange(event.target.checked)}
-              className="h-5 w-5 accent-blue-600"
+              className="h-4 w-4 accent-blue-600"
             />
           </label>
         </div>

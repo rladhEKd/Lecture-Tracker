@@ -434,49 +434,45 @@ export default function CourseDetailPage() {
         </div>
       ) : null}
 
-      <header className="mb-3">
-        <Link
-          href="/"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-gray-700 active:bg-gray-100"
-          aria-label="돌아가기"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="mt-2 rounded-2xl border border-gray-200 bg-gray-50 p-3">
-          <div className="flex items-start gap-2">
+      <header className="mb-4 space-y-3">
+        <div className="flex min-h-10 items-center gap-2">
+          <Link
+            href="/"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-700 active:bg-gray-100"
+            aria-label="돌아가기"
+          >
+            <ArrowLeft size={19} />
+          </Link>
+          {isEditingCourseTitle ? (
+            <input
+              value={courseTitleDraft}
+              onChange={(event) => setCourseTitleDraft(event.target.value)}
+              className="min-h-10 min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-lg font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              aria-label="강의명"
+            />
+          ) : (
+            <h1 className="min-w-0 flex-1 truncate text-xl font-bold leading-tight text-gray-950">
+              {course.title}
+            </h1>
+          )}
+          <div className="flex shrink-0 gap-1">
             {isEditingCourseTitle ? (
-              <input
-                value={courseTitleDraft}
-                onChange={(event) => setCourseTitleDraft(event.target.value)}
-                className="min-h-10 min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-lg font-bold text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                aria-label="강의명"
-              />
-            ) : (
-              <h1 className="min-w-0 flex-1 break-words text-xl font-bold leading-tight text-gray-950">
-                {course.title}
-              </h1>
-            )}
-            <div className="flex shrink-0 gap-1.5">
-              {isEditingCourseTitle ? (
-                <>
-                  <IconButton label="강의명 저장" tone="primary" onClick={handleCourseTitleSave}>
-                    <Check size={18} />
-                  </IconButton>
-                  <IconButton label="강의명 수정 취소" tone="neutral" onClick={handleCourseTitleCancel}>
-                    <X size={18} />
-                  </IconButton>
-                </>
-              ) : (
-                <IconButton label="강의명 수정" tone="neutral" onClick={() => setIsEditingCourseTitle(true)}>
-                  <Pencil size={17} />
+              <>
+                <IconButton label="강의명 저장" tone="primary" onClick={handleCourseTitleSave}>
+                  <Check size={18} />
                 </IconButton>
-              )}
-            </div>
+                <IconButton label="강의명 수정 취소" tone="neutral" onClick={handleCourseTitleCancel}>
+                  <X size={18} />
+                </IconButton>
+              </>
+            ) : (
+              <IconButton label="강의명 수정" tone="neutral" onClick={() => setIsEditingCourseTitle(true)}>
+                <Pencil size={17} />
+              </IconButton>
+            )}
           </div>
         </div>
-      </header>
 
-      <section className="rounded-2xl border border-gray-200 bg-gray-50 p-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-1.5">
             <p className="text-sm font-bold text-gray-700">전체 진도</p>
@@ -490,9 +486,7 @@ export default function CourseDetailPage() {
         <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-gray-200">
           <div className="h-full rounded-full bg-blue-500" style={{ width: `${stats.progressRate}%` }} />
         </div>
-      </section>
 
-      <section className="mt-3 rounded-2xl border border-gray-200 bg-gray-50 p-2.5">
         <div className="flex items-center gap-2">
           <input
             value={searchTerm}
@@ -556,7 +550,7 @@ export default function CourseDetailPage() {
             </label>
           </div>
         ) : null}
-      </section>
+      </header>
 
       <LectureSections
         collapsedSections={collapsedSections}

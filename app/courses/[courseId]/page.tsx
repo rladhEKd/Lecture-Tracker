@@ -17,12 +17,14 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
+  deleteSection,
   deleteLecture,
   getCourse,
   updateCourseTitle,
   updateLectureStatus,
   updateLectureTitle,
   updateSectionPlan,
+  updateSectionTitle,
 } from "@/lib/storage";
 import type { CourseWithLectures, Lecture, LectureStatus, Section } from "@/lib/types";
 
@@ -51,6 +53,11 @@ type SectionPlanDraft = {
   planEndDate: string;
   dailyTargetCount: string;
 } | null;
+type SectionTitleDraft = {
+  sectionId: string;
+  currentTitle: string;
+  title: string;
+} | null;
 
 const statusOptions: { value: LectureStatus; label: string }[] = [
   { value: "NOT_STARTED", label: "미수강" },
@@ -75,9 +82,11 @@ export default function CourseDetailPage() {
   const [isEditingCourseTitle, setIsEditingCourseTitle] = useState(false);
   const [editingLectureId, setEditingLectureId] = useState<string | null>(null);
   const [openLectureMenuId, setOpenLectureMenuId] = useState<string | null>(null);
+  const [openSectionMenuId, setOpenSectionMenuId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [sectionConfirm, setSectionConfirm] = useState<SectionConfirm>(null);
   const [sectionPlanDraft, setSectionPlanDraft] = useState<SectionPlanDraft>(null);
+  const [sectionTitleDraft, setSectionTitleDraft] = useState<SectionTitleDraft>(null);
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -264,28 +273,31 @@ export default function CourseDetailPage() {
   }
 
   function handleLectureMenuToggle(lectureId: string) {
+    setOpenSectionMenuId(null);
     setOpenLectureMenuId((current) => (current === lectureId ? null : lectureId));
   }
 
-  function openSectionConfirm(group: SectionGroup, action: SectionAction) {
-    const isCompleteAction = action === "COMPLETE";
-    const nextStatus: LectureStatus = isCompleteAction
-      ? group.allCompleted
-        ? "NOT_STARTED"
-        : "COMPLETED"
+  function handleSectionMenuToggle(sectionId: string) {
+    setOpenLectureMenuId(null);
+    setOpenSectionMenuId((current) => (current === sectionId ? null : sectionId));
+  }
+
+  function openSectionConfirm(group: SectionGroup) {
+    const nextStatus: LectureStatus = group.allCompleted
+      ? "NOT_STARTED"
       : group.allInProgress
-        ? "NOT_STARTED"
+        ? "COMPLETED"
         : "IN_PROGRESS";
     const count = group.lectures.length;
-    const message = isCompleteAction
-      ? group.allCompleted
+    const message =
+      nextStatus === "NOT_STARTED"
         ? "이 섹션의 완강 상태를 모두 해제할까요?"
-        : `이 섹션의 ${count}개 강의를 모두 완강 처리할까요?`
-      : group.allInProgress
-        ? "이 섹션의 수강중 상태를 모두 해제할까요?"
-        : `이 섹션의 ${count}개 강의를 모두 수강중으로 변경할까요?`;
+        : nextStatus === "COMPLETED"
+          ? `이 섹션의 ${count}개 강의를 모두 완강 처리할까요?`
+          : `이 섹션의 ${count}개 강의를 모두 수강중으로 변경할까요?`;
 
-    setSectionConfirm({ action, group, nextStatus, message });
+    setOpenSectionMenuId(null);
+    setSectionConfirm({ action: "IN_PROGRESS", group, nextStatus, message });
   }
 
   function applySectionConfirm() {
@@ -303,6 +315,7 @@ export default function CourseDetailPage() {
   }
 
   function openSectionPlan(section: Section) {
+    setOpenSectionMenuId(null);
     setSectionPlanDraft({
       sectionId: section.id,
       sectionTitle: section.title,
@@ -342,6 +355,54 @@ export default function CourseDetailPage() {
     });
     setSectionPlanDraft(null);
     showFeedback("계획이 저장되었습니다");
+  }
+
+  function openSectionTitleEdit(section: Section) {
+    setOpenSectionMenuId(null);
+    setSectionTitleDraft({
+      sectionId: section.id,
+      currentTitle: section.title,
+      title: section.title,
+    });
+  }
+
+  function saveSectionTitle() {
+    if (!sectionTitleDraft) {
+      return;
+    }
+
+    const updatedSection = updateSectionTitle(params.courseId, sectionTitleDraft.sectionId, sectionTitleDraft.title);
+    if (!updatedSection) {
+      setSectionTitleDraft(null);
+      return;
+    }
+
+    setCourse((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        sections: current.sections.map((section) =>
+          section.id === updatedSection.id ? updatedSection : section,
+        ),
+      };
+    });
+    setSectionTitleDraft(null);
+    showFeedback("섹션명이 저장되었습니다");
+  }
+
+  function handleSectionDelete(section: Section) {
+    setOpenSectionMenuId(null);
+    const confirmed = window.confirm(`"${section.title}" 섹션을 삭제할까요?\n연결된 강의도 함께 삭제됩니다.`);
+    if (!confirmed) {
+      return;
+    }
+
+    deleteSection(params.courseId, section.id);
+    refreshCourse();
+    showFeedback("섹션이 삭제되었습니다");
   }
 
   function toggleSection(sectionId: string) {
@@ -473,10 +534,14 @@ export default function CourseDetailPage() {
         groups={sectionGroups}
         lectureTitleDrafts={lectureTitleDrafts}
         openLectureMenuId={openLectureMenuId}
+        openSectionMenuId={openSectionMenuId}
         onCancelEdit={handleLectureTitleCancel}
         onChangeDraft={setLectureTitleDrafts}
         onDelete={handleLectureDelete}
         onEdit={handleLectureEditStart}
+        onSectionDelete={handleSectionDelete}
+        onSectionMenuToggle={handleSectionMenuToggle}
+        onSectionTitleEdit={openSectionTitleEdit}
         onLectureMenuToggle={handleLectureMenuToggle}
         onPlanEdit={openSectionPlan}
         onSaveTitle={handleLectureTitleSave}
@@ -497,6 +562,12 @@ export default function CourseDetailPage() {
         onChange={setSectionPlanDraft}
         onSave={saveSectionPlan}
       />
+      <SectionTitleModal
+        draft={sectionTitleDraft}
+        onCancel={() => setSectionTitleDraft(null)}
+        onChange={setSectionTitleDraft}
+        onSave={saveSectionTitle}
+      />
     </main>
   );
 }
@@ -507,6 +578,7 @@ function LectureSections({
   groups,
   lectureTitleDrafts,
   openLectureMenuId,
+  openSectionMenuId,
   onCancelEdit,
   onChangeDraft,
   onDelete,
@@ -515,6 +587,9 @@ function LectureSections({
   onPlanEdit,
   onSaveTitle,
   onSectionAction,
+  onSectionDelete,
+  onSectionMenuToggle,
+  onSectionTitleEdit,
   onStatusToggle,
   onToggleSection,
   visibleLectureCount,
@@ -524,6 +599,7 @@ function LectureSections({
   groups: SectionGroup[];
   lectureTitleDrafts: Record<string, string>;
   openLectureMenuId: string | null;
+  openSectionMenuId: string | null;
   onCancelEdit: (lectureId: string) => void;
   onChangeDraft: Dispatch<SetStateAction<Record<string, string>>>;
   onDelete: (lectureId: string, title: string) => void;
@@ -531,7 +607,10 @@ function LectureSections({
   onLectureMenuToggle: (lectureId: string) => void;
   onPlanEdit: (section: Section) => void;
   onSaveTitle: (lectureId: string) => void;
-  onSectionAction: (group: SectionGroup, action: SectionAction) => void;
+  onSectionAction: (group: SectionGroup) => void;
+  onSectionDelete: (section: Section) => void;
+  onSectionMenuToggle: (sectionId: string) => void;
+  onSectionTitleEdit: (section: Section) => void;
   onStatusToggle: (lecture: Lecture) => void;
   onToggleSection: (sectionId: string) => void;
   visibleLectureCount: number;
@@ -552,9 +631,15 @@ function LectureSections({
         <div className="space-y-3">
           {groups.map((group) => {
             const isCollapsed = collapsedSections[group.section.id] ?? true;
+            const isSectionMenuOpen = openSectionMenuId === group.section.id;
 
             return (
-              <article key={group.section.id} className="overflow-visible rounded-2xl border border-gray-200 bg-gray-50">
+              <article
+                key={group.section.id}
+                className={`relative overflow-visible rounded-2xl border border-gray-200 bg-gray-50 ${
+                  isSectionMenuOpen ? "z-40" : "z-0"
+                }`}
+              >
                 <div className="flex items-center gap-2 px-3 py-2.5">
                   <button
                     type="button"
@@ -580,24 +665,50 @@ function LectureSections({
                     </span>
                   </button>
                   <IconButton
-                    active={group.allInProgress}
-                    label="섹션 수강중 변경"
-                    tone="warning"
-                    onClick={() => onSectionAction(group, "IN_PROGRESS")}
+                    active={group.allInProgress || group.allCompleted}
+                    label="섹션 상태 변경"
+                    tone={group.allCompleted ? "success" : group.allInProgress ? "warning" : "neutral"}
+                    onClick={() => onSectionAction(group)}
                   >
-                    <PlayCircle size={17} />
+                    {group.allCompleted ? (
+                      <CheckCircle2 size={17} />
+                    ) : group.allInProgress ? (
+                      <PlayCircle size={17} />
+                    ) : (
+                      <Circle size={17} />
+                    )}
                   </IconButton>
-                  <IconButton
-                    active={group.allCompleted}
-                    label="섹션 완강 변경"
-                    tone="success"
-                    onClick={() => onSectionAction(group, "COMPLETE")}
-                  >
-                    <CheckCircle2 size={17} />
+                  <IconButton label="섹션 메뉴 열기" tone="neutral" onClick={() => onSectionMenuToggle(group.section.id)}>
+                    <MoreHorizontal size={17} />
                   </IconButton>
-                  <IconButton label="섹션 계획 수정" tone="neutral" onClick={() => onPlanEdit(group.section)}>
-                    <Pencil size={16} />
-                  </IconButton>
+                  {isSectionMenuOpen ? (
+                    <div className="absolute right-3 top-12 z-50 w-36 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => onPlanEdit(group.section)}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+                      >
+                        <Pencil size={15} />
+                        계획 설정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSectionTitleEdit(group.section)}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-gray-700 active:bg-gray-100"
+                      >
+                        <Pencil size={15} />
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSectionDelete(group.section)}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-600 active:bg-red-50"
+                      >
+                        <Trash2 size={15} />
+                        삭제
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
                 {isCollapsed ? null : (
@@ -816,6 +927,57 @@ function SectionPlanModal({
           </div>
         </div>
         <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-gray-100 px-4 pb-4 pt-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-700 active:bg-gray-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            className="min-h-11 rounded-xl bg-blue-600 text-sm font-bold text-white active:bg-blue-700"
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionTitleModal({
+  draft,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  draft: SectionTitleDraft;
+  onCancel: () => void;
+  onChange: Dispatch<SetStateAction<SectionTitleDraft>>;
+  onSave: () => void;
+}) {
+  if (!draft) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/30 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))]">
+      <div className="w-full max-w-screen-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 className="text-lg font-bold text-gray-950">섹션명 수정</h2>
+        <p className="mt-1 truncate text-sm font-bold text-gray-500">{draft.currentTitle}</p>
+        <label className="mt-4 block">
+          <span className="text-sm font-bold text-gray-800">섹션명</span>
+          <input
+            value={draft.title}
+            onChange={(event) =>
+              onChange((current) => (current ? { ...current, title: event.target.value } : current))
+            }
+            className="mt-1 box-border min-h-11 w-full min-w-0 rounded-xl border border-gray-200 bg-white px-3 text-base text-gray-950 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+          />
+        </label>
+        <div className="mt-5 grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={onCancel}

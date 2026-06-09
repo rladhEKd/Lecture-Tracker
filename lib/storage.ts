@@ -288,6 +288,59 @@ export function updateSectionPlan(
   return updatedSection;
 }
 
+export function updateSectionTitle(courseId: string, sectionId: string, title: string): Section | null {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    return null;
+  }
+
+  const courses = readCourses();
+  let updatedSection: Section | null = null;
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    return {
+      ...course,
+      sections: course.sections.map((section) => {
+        if (section.id !== sectionId) {
+          return section;
+        }
+
+        updatedSection = {
+          ...section,
+          title: nextTitle,
+        };
+
+        return updatedSection;
+      }),
+    };
+  });
+
+  writeCourses(nextCourses);
+  return updatedSection;
+}
+
+export function deleteSection(courseId: string, sectionId: string) {
+  const courses = readCourses();
+
+  const nextCourses = courses.map((course) => {
+    if (course.id !== courseId) {
+      return course;
+    }
+
+    return {
+      ...course,
+      sections: course.sections.filter((section) => section.id !== sectionId),
+      lectures: course.lectures.filter((lecture) => lecture.sectionId !== sectionId),
+    };
+  });
+
+  writeCourses(nextCourses);
+}
+
 export function createCourse(title: string, lines: string[]): Course {
   const now = new Date().toISOString();
   const courseId = createId();
